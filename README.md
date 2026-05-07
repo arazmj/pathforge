@@ -27,8 +27,8 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 | Routing Information Base: Adj-RIB-In, Loc-RIB, Adj-RIB-Out | ✅ |
 | BGP decision process (LOCAL_PREF → AS_PATH → ORIGIN → MED) | ✅ |
 | Route withdrawal propagation to RIB | ✅ |
-| NOTIFICATION messages & error handling | ⏳ Planned |
-| TOML configuration | ⏳ Planned |
+| NOTIFICATION messages & error handling | ✅ |
+| TOML configuration file (router, neighbors, policy) | ✅ |
 | BGP Communities (RFC 1997) | ⏳ Planned |
 | Route filtering & policy | ⏳ Planned |
 | Multi-protocol / IPv6 (RFC 4760) | ⏳ Planned |
@@ -49,7 +49,7 @@ pathforge/
 │   ├── main.rs       # Entry point, CLI argument parsing
 │   ├── server.rs     # TCP listener, connection dispatch
 │   ├── peer.rs       # Peer state, connection handler
-│   ├── rib.rs        # Routing Information Base: Adj-RIB-In, Loc-RIB + decision process
+│   ├── config.rs     # TOML configuration: router, neighbors, prefix lists, communities
 │   ├── message/      # BGP message types
 │   │   ├── mod.rs        # Header, BgpMessage, MessageType
 │   │   ├── open.rs       # OPEN message (RFC 4271 §4.2)
@@ -85,14 +85,43 @@ cd pathforge
 cargo build --release
 ```
 
-### Run
+### Run with config file
 
 ```bash
-# Listen on default BGP port (requires privileges for port 179)
-sudo ./target/release/pathforge --local-as 65001 --router-id 10.0.0.1
+# Run with a TOML config file
+sudo ./target/release/pathforge --config pathforge.toml
 
-# Listen on a custom port for testing
-./target/release/pathforge --listen 127.0.0.1:1790 --local-as 65001 --router-id 10.0.0.1
+# Or use CLI flags (no config file needed)
+sudo ./target/release/pathforge --local-as 65001 --router-id 10.0.0.1
+```
+
+### Example config (`pathforge.example.toml`)
+
+```toml
+[router]
+local_as = 65001
+router_id = "10.0.0.1"
+listen = "0.0.0.0:179"
+hold_time = 90
+
+[[neighbors]]
+addr = "192.168.1.2"
+remote_as = 65002
+description = "Transit provider"
+import_policy = "import-from-transit"
+
+[[neighbors]]
+addr = "10.0.0.2"
+remote_as = 65001
+description = "iBGP peer"
+
+[policy]
+[[policy.prefix_lists]]
+name = "import-from-transit"
+entries = [
+    { action = "deny",   prefix = "10.0.0.0/8" },
+    { action = "permit", prefix = "0.0.0.0/0", ge = 8, le = 24 },
+]
 ```
 
 ---

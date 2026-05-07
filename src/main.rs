@@ -1,5 +1,6 @@
 mod fsm;
 mod attr;
+mod config;
 mod message;
 mod peer;
 mod rib;
@@ -17,21 +18,25 @@ use timer::LocalConfig;
 #[derive(Parser, Debug)]
 #[command(name = "pathforge", about = "PathForge — A BGP-4 daemon written in Rust 🦀")]
 struct Cli {
-    /// Address to listen on for BGP connections
-    #[arg(short, long, default_value = "0.0.0.0:179")]
-    listen: SocketAddr,
+    /// Path to TOML configuration file
+    #[arg(short, long)]
+    config: Option<std::path::PathBuf>,
 
-    /// Local AS number
-    #[arg(long, default_value_t = 65000)]
-    local_as: u32,
+    /// Address to listen on for BGP connections (overrides config)
+    #[arg(short, long)]
+    listen: Option<SocketAddr>,
 
-    /// Router ID (IPv4 address)
-    #[arg(long, default_value = "1.1.1.1")]
-    router_id: Ipv4Addr,
+    /// Local AS number (overrides config)
+    #[arg(long)]
+    local_as: Option<u32>,
 
-    /// Hold time in seconds
-    #[arg(long, default_value_t = 90)]
-    hold_time: u16,
+    /// Router ID IPv4 address (overrides config)
+    #[arg(long)]
+    router_id: Option<Ipv4Addr>,
+
+    /// Hold time in seconds (overrides config)
+    #[arg(long)]
+    hold_time: Option<u16>,
 }
 
 #[tokio::main]
@@ -41,8 +46,23 @@ async fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
-    let mut local = LocalConfig::new(cli.local_as, cli.router_id);
-    local.hold_time = cli.hold_time;
-    let server = Server::new(cli.listen, local);
+
+    let local = if let Some(config_path) = cli.config {
+        let cfg = config::Config::from_file(&config_path)?;
+        tracing::info!(path = %config_path.display(), "Loaded configuration");
+        let mut lc = LocalConfig::new(cfg.router.local_as, cfg.router.router_id);
+        lc.hold_time = cfg.router.hold_time;
+        lc
+    } else {
+        let mut lc = LocalConfig::new(
+            cli.local_as.unwrap_or(65000),
+            cli.router_id.unwrap_or(Ipv4Addr::new(1, 1, 1, 1)),
+        );
+        lc.hold_time = cli.hold_time.unwrap_or(90);
+        lc
+    };
+
+    let listen = cli.listen.unwrap_or_else(|| "0.0.0.0:179".parse().unwrap());
+    let server = Server::new(listen, local);
     server.run().await
 }

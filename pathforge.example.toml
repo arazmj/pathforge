@@ -1,0 +1,67 @@
+# PathForge BGP Daemon — Example Configuration
+
+[router]
+# Local AS number (required)
+local_as = 65001
+# BGP Router ID — typically the primary loopback address (required)
+router_id = "10.0.0.1"
+# Listen address and port (default: 0.0.0.0:179)
+listen = "0.0.0.0:179"
+# Hold time in seconds — must be 0 (disabled) or >= 3 (default: 90)
+hold_time = 90
+
+# ----- Neighbors (BGP Peers) -----
+
+[[neighbors]]
+addr = "192.168.1.2"
+remote_as = 65002
+description = "Transit provider"
+import_policy = "import-from-transit"
+export_policy = "export-to-transit"
+
+[[neighbors]]
+addr = "192.168.1.10"
+remote_as = 65003
+description = "Peer"
+hold_time = 30
+
+[[neighbors]]
+addr = "10.0.0.2"
+remote_as = 65001
+description = "iBGP full-mesh peer"
+
+[[neighbors]]
+addr = "10.0.0.3"
+remote_as = 65001
+description = "Route reflector client"
+route_reflector_client = true
+
+# ----- Route Policy -----
+
+[policy]
+
+# Prefix lists
+[[policy.prefix_lists]]
+name = "import-from-transit"
+entries = [
+    { action = "deny",   prefix = "0.0.0.0/0" },               # Default route
+    { action = "deny",   prefix = "10.0.0.0/8" },              # RFC 1918
+    { action = "deny",   prefix = "172.16.0.0/12" },           # RFC 1918
+    { action = "deny",   prefix = "192.168.0.0/16" },          # RFC 1918
+    { action = "permit", prefix = "0.0.0.0/0", ge = 8, le = 24 },  # Public space /8–/24
+]
+
+[[policy.prefix_lists]]
+name = "export-to-transit"
+entries = [
+    { action = "permit", prefix = "203.0.113.0/24" },           # Our prefix
+]
+
+# Community lists
+[[policy.community_lists]]
+name = "blackhole"
+communities = ["65001:9999"]
+
+[[policy.community_lists]]
+name = "no-export"
+communities = ["no-export"]
