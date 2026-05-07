@@ -1,0 +1,102 @@
+# PathForge 🦀
+
+> A feature-rich BGP-4 daemon written in Rust
+
+[![Build Status](https://github.com/arazmj/pathforge/actions/workflows/rust.yml/badge.svg)](https://github.com/arazmj/pathforge/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+PathForge is a from-scratch implementation of the **Border Gateway Protocol version 4** ([RFC 4271](https://datatracker.ietf.org/doc/html/rfc4271)) written in Rust. It is designed for correctness, observability, and extensibility.
+
+---
+
+## Features
+
+| Feature | Status |
+|---------|--------|
+| TCP listener on port 179 | ✅ |
+| BGP FSM (Idle → Connect → Active → OpenSent → OpenConfirm → Established) | ✅ Skeleton |
+| BGP OPEN message | 🚧 In progress |
+| BGP KEEPALIVE message | 🚧 In progress |
+| BGP UPDATE message | ⏳ Planned |
+| Path attributes (AS_PATH, NEXT_HOP, MED, LOCAL_PREF…) | ⏳ Planned |
+| Routing Information Base (RIB) | ⏳ Planned |
+| NOTIFICATION messages & error handling | ⏳ Planned |
+| TOML configuration | ⏳ Planned |
+| BGP Communities (RFC 1997) | ⏳ Planned |
+| Route filtering & policy | ⏳ Planned |
+| Multi-protocol / IPv6 (RFC 4760) | ⏳ Planned |
+| CLI management interface | ⏳ Planned |
+| gRPC / REST API | ⏳ Planned |
+| Route Reflector (RFC 4456) | ⏳ Planned |
+| Prometheus metrics | ⏳ Planned |
+| Docker Compose test environment | ⏳ Planned |
+| End-to-end tests with FRRouting | ⏳ Planned |
+
+---
+
+## Architecture
+
+```
+pathforge/
+├── src/
+│   ├── main.rs       # Entry point, CLI argument parsing
+│   ├── server.rs     # TCP listener, connection dispatch
+│   ├── peer.rs       # Peer state, connection handler
+│   ├── fsm.rs        # BGP Finite State Machine (RFC 4271 §8)
+│   └── message/      # BGP message types (coming soon)
+└── Cargo.toml
+```
+
+### BGP State Machine
+
+PathForge implements the RFC 4271 FSM with these states:
+
+```
+Idle → Connect → OpenSent → OpenConfirm → Established
+          ↓
+        Active
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Rust 1.70+ (`rustup update stable`)
+
+### Build
+
+```bash
+git clone https://github.com/arazmj/pathforge
+cd pathforge
+cargo build --release
+```
+
+### Run
+
+```bash
+# Listen on default BGP port (requires privileges for port 179)
+sudo ./target/release/pathforge
+
+# Listen on a custom port for testing
+./target/release/pathforge --listen 127.0.0.1:1790
+```
+
+---
+
+## Relevant RFCs
+
+| RFC | Description |
+|-----|-------------|
+| [RFC 4271](https://datatracker.ietf.org/doc/html/rfc4271) | A Border Gateway Protocol 4 (BGP-4) |
+| [RFC 4760](https://datatracker.ietf.org/doc/html/rfc4760) | Multiprotocol Extensions for BGP-4 |
+| [RFC 1997](https://datatracker.ietf.org/doc/html/rfc1997) | BGP Communities Attribute |
+| [RFC 4456](https://datatracker.ietf.org/doc/html/rfc4456) | BGP Route Reflection |
+| [RFC 4486](https://datatracker.ietf.org/doc/html/rfc4486) | Subcodes for BGP Cease NOTIFICATION |
+
+---
+
+## License
+
+MIT
