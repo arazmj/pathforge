@@ -34,7 +34,8 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 | Import/export policy engine | ✅ |
 | Multi-protocol extensions: AFI/SAFI (RFC 4760) | ✅ |
 | IPv6 unicast: MP_REACH_NLRI / MP_UNREACH_NLRI | ✅ |
-| CLI management interface | ⏳ Planned |
+| Management CLI via Unix socket | ✅ |
+| Commands: show bgp summary/rib/neighbors, show bgp rib prefix | ✅ |
 | gRPC / REST API | ⏳ Planned |
 | Route Reflector (RFC 4456) | ⏳ Planned |
 | Prometheus metrics | ⏳ Planned |
@@ -51,7 +52,7 @@ pathforge/
 │   ├── main.rs       # Entry point, CLI argument parsing
 │   ├── server.rs     # TCP listener, connection dispatch
 │   ├── peer.rs       # Peer state, connection handler
-│   ├── config.rs     # TOML configuration: router, neighbors, prefix lists, communities
+│   ├── mgmt.rs       # Management socket: show bgp summary/rib/neighbors commands
 │   ├── message/      # BGP message types
 │   │   ├── mod.rs        # Header, BgpMessage, MessageType
 │   │   ├── open.rs       # OPEN message (RFC 4271 §4.2)
@@ -87,7 +88,28 @@ cd pathforge
 cargo build --release
 ```
 
-### Run with config file
+### Management CLI
+
+Connect to the management interface via Unix socket (default `/tmp/pathforge.sock`):
+
+```bash
+nc -U /tmp/pathforge.sock
+# or
+socat - UNIX-CONNECT:/tmp/pathforge.sock
+```
+
+Available commands:
+
+```
+show bgp summary              — Peer summary and Loc-RIB route count
+show bgp rib                  — Full BGP routing table
+show bgp rib prefix 10.0.0.0/8 — Detail for a specific prefix
+show bgp neighbors            — All neighbor details
+show bgp neighbors 192.168.1.2 — Specific neighbor detail
+help                          — Show all commands
+```
+
+### Run
 
 ```bash
 # Run with a TOML config file

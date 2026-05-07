@@ -2,6 +2,7 @@ mod fsm;
 mod attr;
 mod config;
 mod message;
+mod mgmt;
 mod mp;
 mod peer;
 mod policy;
@@ -14,6 +15,7 @@ use clap::Parser;
 use std::net::{Ipv4Addr, SocketAddr};
 use tracing_subscriber::EnvFilter;
 
+use mgmt::{MgmtServer, MgmtState};
 use server::Server;
 use timer::LocalConfig;
 
@@ -39,6 +41,10 @@ struct Cli {
     /// Hold time in seconds (overrides config)
     #[arg(long)]
     hold_time: Option<u16>,
+
+    /// Unix socket path for management interface
+    #[arg(long, default_value = "/tmp/pathforge.sock")]
+    mgmt_socket: String,
 }
 
 #[tokio::main]
@@ -66,5 +72,16 @@ async fn main() -> Result<()> {
 
     let listen = cli.listen.unwrap_or_else(|| "0.0.0.0:179".parse().unwrap());
     let server = Server::new(listen, local);
+    let rib = server.rib();
+    let mgmt_state = MgmtState::shared();
+
+    // Start management server concurrently
+    let mgmt = MgmtServer::new(&cli.mgmt_socket, mgmt_state, rib);
+    tokio::spawn(async move {
+        if let Err(e) = mgmt.run().await {
+            tracing::error!(error = %e, "Management server error");
+        }
+    });
+
     server.run().await
 }
