@@ -13,11 +13,12 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 
 | Feature | Status |
 |---------|--------|
-| TCP listener on port 179 | ✅ |
+| BGP OPEN message parsing & serialization | ✅ |
+| BGP KEEPALIVE message | ✅ |
+| BGP UPDATE message (NLRI + withdrawn routes) | ✅ |
+| NOTIFICATION message | ✅ |
+| BGP message header (19-byte, RFC 4271 §4.1) | ✅ |
 | BGP FSM (Idle → Connect → Active → OpenSent → OpenConfirm → Established) | ✅ Skeleton |
-| BGP OPEN message | 🚧 In progress |
-| BGP KEEPALIVE message | 🚧 In progress |
-| BGP UPDATE message | ⏳ Planned |
 | Path attributes (AS_PATH, NEXT_HOP, MED, LOCAL_PREF…) | ⏳ Planned |
 | Routing Information Base (RIB) | ⏳ Planned |
 | NOTIFICATION messages & error handling | ⏳ Planned |
@@ -43,7 +44,12 @@ pathforge/
 │   ├── server.rs     # TCP listener, connection dispatch
 │   ├── peer.rs       # Peer state, connection handler
 │   ├── fsm.rs        # BGP Finite State Machine (RFC 4271 §8)
-│   └── message/      # BGP message types (coming soon)
+│   ├── message/      # BGP message types
+│   │   ├── mod.rs        # Header, BgpMessage, MessageType
+│   │   ├── open.rs       # OPEN message (RFC 4271 §4.2)
+│   │   ├── keepalive.rs  # KEEPALIVE message (RFC 4271 §4.4)
+│   │   ├── notification.rs # NOTIFICATION message (RFC 4271 §4.5)
+│   │   └── update.rs     # UPDATE message + NLRI prefix parsing (RFC 4271 §4.3)
 └── Cargo.toml
 ```
 
