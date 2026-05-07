@@ -1,0 +1,9 @@
+[router]
+local_as = 65001
+router_id = "172.20.0.2"
+hold_time = 30
+
+[[neighbors]]
+address = "172.20.0.3"
+remote_as = 65002
+description = "FRRouting peer"

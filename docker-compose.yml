@@ -1,0 +1,50 @@
+version: "3.9"
+
+networks:
+  bgp-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+services:
+  pathforge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pathforge
+    hostname: pathforge
+    networks:
+      bgp-net:
+        ipv4_address: 172.20.0.2
+    command:
+      - --listen
+      - "0.0.0.0:179"
+      - --local-as
+      - "65001"
+      - --router-id
+      - "172.20.0.2"
+      - --hold-time
+      - "30"
+      - --mgmt-socket
+      - /tmp/pathforge.sock
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+
+  frr:
+    image: frrouting/frr:v9.0.0
+    container_name: frr
+    hostname: frr
+    networks:
+      bgp-net:
+        ipv4_address: 172.20.0.3
+    volumes:
+      - ./docker/frr/frr.conf:/etc/frr/frr.conf:ro
+      - ./docker/frr/daemons:/etc/frr/daemons:ro
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    restart: unless-stopped
+    depends_on:
+      - pathforge

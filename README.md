@@ -41,8 +41,9 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 | Prometheus metrics endpoint (sessions, messages, routes, errors) | ✅ |
 | `show bgp metrics` and `metrics` management commands | ✅ |
 | Python smoke test suite (`tests/smoke_test.py`) | ✅ |
+| Docker Compose environment (pathforge + FRRouting) | ✅ |
+| Makefile: `make up/down/logs/smoke/test` | ✅ |
 | gRPC / REST API | ⏳ Planned |
-| Docker Compose test environment | ⏳ Planned |
 | End-to-end tests with FRRouting | ⏳ Planned |
 
 ---
@@ -149,6 +150,31 @@ entries = [
     { action = "deny",   prefix = "10.0.0.0/8" },
     { action = "permit", prefix = "0.0.0.0/0", ge = 8, le = 24 },
 ]
+```
+
+---
+
+## Docker Compose Test Environment
+
+Spin up pathforge alongside **FRRouting** for a real BGP session:
+
+```bash
+make up      # Build & start pathforge + FRR containers
+make logs    # Follow logs from both containers
+make down    # Tear down and remove volumes
+```
+
+The network is `172.20.0.0/24`:
+- `172.20.0.2` — PathForge (AS 65001)
+- `172.20.0.3` — FRRouting (AS 65002)
+
+FRR advertises `10.1.0.0/24` and `10.2.0.0/24` via eBGP to PathForge.
+
+### Smoke Tests
+
+```bash
+make smoke   # Python smoke test (BGP handshake + management socket)
+make test    # cargo test (59 unit tests)
 ```
 
 ---
