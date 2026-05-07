@@ -2,6 +2,7 @@ mod fsm;
 mod attr;
 mod message;
 mod peer;
+mod rib;
 mod server;
 mod timer;
 

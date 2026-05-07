@@ -24,7 +24,9 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 | Path attributes: ORIGIN, AS_PATH (4-byte), NEXT_HOP, MED, LOCAL_PREF | ✅ |
 | Path attributes: ATOMIC_AGGREGATE, AGGREGATOR, COMMUNITIES (RFC 1997) | ✅ |
 | Path attributes: ORIGINATOR_ID, CLUSTER_LIST, unknown pass-through | ✅ |
-| Routing Information Base (RIB) | ⏳ Planned |
+| Routing Information Base: Adj-RIB-In, Loc-RIB, Adj-RIB-Out | ✅ |
+| BGP decision process (LOCAL_PREF → AS_PATH → ORIGIN → MED) | ✅ |
+| Route withdrawal propagation to RIB | ✅ |
 | NOTIFICATION messages & error handling | ⏳ Planned |
 | TOML configuration | ⏳ Planned |
 | BGP Communities (RFC 1997) | ⏳ Planned |
@@ -47,7 +49,7 @@ pathforge/
 │   ├── main.rs       # Entry point, CLI argument parsing
 │   ├── server.rs     # TCP listener, connection dispatch
 │   ├── peer.rs       # Peer state, connection handler
-│   ├── attr.rs       # Path attributes: ORIGIN, AS_PATH, NEXT_HOP, MED, LOCAL_PREF, communities
+│   ├── rib.rs        # Routing Information Base: Adj-RIB-In, Loc-RIB + decision process
 │   ├── message/      # BGP message types
 │   │   ├── mod.rs        # Header, BgpMessage, MessageType
 │   │   ├── open.rs       # OPEN message (RFC 4271 §4.2)

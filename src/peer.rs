@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::sync::{Arc, RwLock};
 use anyhow::Result;
 use bytes::BytesMut;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -11,6 +12,8 @@ use crate::message::{BgpMessage, MessageType, HEADER_LEN};
 use crate::message::keepalive::KeepaliveMessage;
 use crate::message::notification::NotificationMessage;
 use crate::message::open::OpenMessage;
+use crate::message::update::UpdateMessage;
+use crate::rib::Rib;
 use crate::timer::{BgpTimers, LocalConfig};
 
 /// Represents a BGP peer session.
@@ -22,10 +25,11 @@ pub struct Peer {
     pub timers: BgpTimers,
     pub negotiated_hold_time: u16,
     pub peer_router_id: Option<std::net::Ipv4Addr>,
+    pub rib: Arc<RwLock<Rib>>,
 }
 
 impl Peer {
-    pub fn new(addr: SocketAddr, remote_as: u32, local: LocalConfig) -> Self {
+    pub fn new(addr: SocketAddr, remote_as: u32, local: LocalConfig, rib: Arc<RwLock<Rib>>) -> Self {
         let timers = BgpTimers::new(local.hold_time);
         Self {
             addr,
@@ -35,6 +39,7 @@ impl Peer {
             timers,
             negotiated_hold_time: 90,
             peer_router_id: None,
+            rib,
         }
     }
 
@@ -59,9 +64,14 @@ impl Peer {
     }
 
     /// Run the BGP session for an incoming TCP connection.
-    pub async fn handle_incoming(stream: TcpStream, peer_addr: SocketAddr, local: LocalConfig) -> Result<()> {
+    pub async fn handle_incoming(
+        stream: TcpStream,
+        peer_addr: SocketAddr,
+        local: LocalConfig,
+        rib: Arc<RwLock<Rib>>,
+    ) -> Result<()> {
         info!(peer = %peer_addr, "Incoming TCP connection");
-        let mut peer = Peer::new(peer_addr, 0, local.clone());
+        let mut peer = Peer::new(peer_addr, 0, local.clone(), rib);
         peer.transition(BgpEvent::ManualStart);
         peer.transition(BgpEvent::TcpConnectionConfirmed);
         peer.run_session(stream).await
@@ -87,6 +97,10 @@ impl Peer {
                 let notif = NotificationMessage::hold_timer_expired();
                 let _ = stream.write_all(&notif.serialize()).await;
                 self.transition(BgpEvent::HoldTimerExpired);
+                // Clean up RIB
+                if let Ok(mut rib) = self.rib.write() {
+                    rib.remove_peer(self.addr);
+                }
                 return Ok(());
             }
 
@@ -97,7 +111,7 @@ impl Peer {
                 debug!(peer = %self.addr, "Sent KEEPALIVE");
             }
 
-            // Read available data (non-blocking with short timeout)
+            // Read available data
             let mut tmp = [0u8; 4096];
             tokio::select! {
                 result = stream.read(&mut tmp) => {
@@ -105,6 +119,12 @@ impl Peer {
                         Ok(0) => {
                             info!(peer = %self.addr, "Connection closed by peer");
                             self.transition(BgpEvent::TcpConnectionFail);
+                            if let Ok(mut rib) = self.rib.write() {
+                                let removed = rib.remove_peer(self.addr);
+                                if !removed.is_empty() {
+                                    info!(peer = %self.addr, "Withdrew {} routes from RIB", removed.len());
+                                }
+                            }
                             return Ok(());
                         }
                         Ok(n) => buf.extend_from_slice(&tmp[..n]),
@@ -116,7 +136,6 @@ impl Peer {
                     }
                 }
                 _ = sleep(Duration::from_millis(100)) => {
-                    // Timeout: continue to check timers
                     continue;
                 }
             }
@@ -135,13 +154,10 @@ impl Peer {
                 info!(peer = %self.addr, "Received OPEN AS={} hold_time={} id={}", open.my_as, open.hold_time, open.bgp_id);
                 self.peer_router_id = Some(open.bgp_id);
                 self.remote_as = open.my_as as u32;
-                // Negotiate hold time: minimum of both
                 self.negotiated_hold_time = self.local.hold_time.min(open.hold_time);
                 self.timers = BgpTimers::new(self.negotiated_hold_time);
                 self.timers.reset_hold_timer();
                 self.transition(BgpEvent::BgpOpen);
-
-                // Send KEEPALIVE to confirm OPEN
                 stream.write_all(&KeepaliveMessage.serialize()).await?;
                 debug!(peer = %self.addr, "Sent KEEPALIVE (OPEN acknowledgement)");
             }
@@ -155,15 +171,36 @@ impl Peer {
                 }
             }
             MessageType::Update => {
-                debug!(peer = %self.addr, "Received UPDATE ({} bytes)", msg.body.len());
+                let update = UpdateMessage::parse(msg.body)?;
                 self.timers.reset_hold_timer();
                 self.transition(BgpEvent::UpdateMsg);
+
+                let nlri_count = update.nlri.len();
+                let withdrawn_count = update.withdrawn_routes.len();
+
+                if let Ok(mut rib) = self.rib.write() {
+                    rib.process_update(
+                        self.addr,
+                        self.remote_as,
+                        &update.nlri,
+                        &update.path_attributes,
+                        &update.withdrawn_routes,
+                    );
+                    let (_, _, loc_count) = rib.summary();
+                    info!(
+                        peer = %self.addr,
+                        "+{} -{} routes | Loc-RIB: {} prefixes",
+                        nlri_count, withdrawn_count, loc_count
+                    );
+                }
             }
             MessageType::Notification => {
                 let notif = NotificationMessage::parse(msg.body)?;
                 warn!(peer = %self.addr, "Received NOTIFICATION code={} subcode={}", notif.error_code, notif.error_subcode);
                 self.transition(BgpEvent::NotifMsg);
-                return Ok(());
+                if let Ok(mut rib) = self.rib.write() {
+                    rib.remove_peer(self.addr);
+                }
             }
             MessageType::RouteRefresh => {
                 debug!(peer = %self.addr, "Received ROUTE-REFRESH");
