@@ -1,5 +1,5 @@
-use bytes::{Buf, BufMut, BytesMut};
 use super::{Header, MessageError, MessageType, HEADER_LEN};
+use bytes::{Buf, BufMut, BytesMut};
 
 /// BGP NOTIFICATION error codes (RFC 4271 §4.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,13 +43,20 @@ impl NotificationMessage {
     /// Parse NOTIFICATION body (excluding header).
     pub fn parse(mut body: impl Buf) -> Result<Self, MessageError> {
         if body.remaining() < 2 {
-            return Err(MessageError::TooShort { expected: 2, got: body.remaining() });
+            return Err(MessageError::TooShort {
+                expected: 2,
+                got: body.remaining(),
+            });
         }
         let error_code = body.get_u8();
         let error_subcode = body.get_u8();
         let mut data = vec![0u8; body.remaining()];
         body.copy_to_slice(&mut data);
-        Ok(Self { error_code, error_subcode, data })
+        Ok(Self {
+            error_code,
+            error_subcode,
+            data,
+        })
     }
 
     /// Serialize NOTIFICATION message (header + body).

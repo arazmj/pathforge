@@ -20,14 +20,24 @@ impl PolicyEngine {
     /// Returns `true` if the route should be accepted.
     pub fn apply(&self, policy_name: &str, prefix: &Prefix, attrs: &PathAttributes) -> bool {
         // Find the prefix list with the given name
-        if let Some(pl) = self.policy.prefix_lists.iter().find(|p| p.name == policy_name) {
+        if let Some(pl) = self
+            .policy
+            .prefix_lists
+            .iter()
+            .find(|p| p.name == policy_name)
+        {
             return self.evaluate_prefix_list(pl, prefix, attrs);
         }
         // No matching policy: default permit
         true
     }
 
-    fn evaluate_prefix_list(&self, list: &PrefixList, prefix: &Prefix, attrs: &PathAttributes) -> bool {
+    fn evaluate_prefix_list(
+        &self,
+        list: &PrefixList,
+        prefix: &Prefix,
+        attrs: &PathAttributes,
+    ) -> bool {
         for entry in &list.entries {
             if self.matches_entry(entry, prefix) {
                 return entry.action == FilterAction::Permit;
@@ -72,7 +82,12 @@ impl PolicyEngine {
 
     /// Test whether attributes match a named community list.
     pub fn matches_community_list(&self, list_name: &str, attrs: &PathAttributes) -> bool {
-        if let Some(cl) = self.policy.community_lists.iter().find(|c| c.name == list_name) {
+        if let Some(cl) = self
+            .policy
+            .community_lists
+            .iter()
+            .find(|c| c.name == list_name)
+        {
             return cl.communities.iter().any(|c| self.has_community(attrs, c));
         }
         false
@@ -149,22 +164,18 @@ mod tests {
                 },
                 PrefixList {
                     name: "exact-only".to_string(),
-                    entries: vec![
-                        PrefixListEntry {
-                            action: FilterAction::Permit,
-                            prefix: "172.16.0.0/12".to_string(),
-                            ge: None,
-                            le: None,
-                        },
-                    ],
+                    entries: vec![PrefixListEntry {
+                        action: FilterAction::Permit,
+                        prefix: "172.16.0.0/12".to_string(),
+                        ge: None,
+                        le: None,
+                    }],
                 },
             ],
-            community_lists: vec![
-                CommunityList {
-                    name: "no-export-comms".to_string(),
-                    communities: vec!["no-export".to_string(), "65001:100".to_string()],
-                },
-            ],
+            community_lists: vec![CommunityList {
+                name: "no-export-comms".to_string(),
+                communities: vec!["no-export".to_string(), "65001:100".to_string()],
+            }],
         })
     }
 
@@ -214,12 +225,16 @@ mod tests {
     #[test]
     fn test_community_matching() {
         let eng = make_engine();
-        let mut attrs = PathAttributes::default();
-        attrs.communities = vec![Community::NO_EXPORT];
+        let attrs = PathAttributes {
+            communities: vec![Community::NO_EXPORT],
+            ..Default::default()
+        };
         assert!(eng.matches_community_list("no-export-comms", &attrs));
 
-        let mut attrs2 = PathAttributes::default();
-        attrs2.communities = vec![Community(((65001u32) << 16) | 100)];
+        let attrs2 = PathAttributes {
+            communities: vec![Community(((65001u32) << 16) | 100)],
+            ..Default::default()
+        };
         assert!(eng.matches_community_list("no-export-comms", &attrs2));
 
         let attrs3 = PathAttributes::default();
@@ -238,10 +253,25 @@ mod tests {
     #[test]
     fn test_is_subnet() {
         // 10.1.0.0/16 is a subnet of 10.0.0.0/8
-        assert!(is_subnet("10.1.0.0".parse().unwrap(), 16, "10.0.0.0".parse().unwrap(), 8));
+        assert!(is_subnet(
+            "10.1.0.0".parse().unwrap(),
+            16,
+            "10.0.0.0".parse().unwrap(),
+            8
+        ));
         // 192.168.0.0/16 is not a subnet of 10.0.0.0/8
-        assert!(!is_subnet("192.168.0.0".parse().unwrap(), 16, "10.0.0.0".parse().unwrap(), 8));
+        assert!(!is_subnet(
+            "192.168.0.0".parse().unwrap(),
+            16,
+            "10.0.0.0".parse().unwrap(),
+            8
+        ));
         // 0.0.0.0/0 matches everything
-        assert!(is_subnet("1.2.3.4".parse().unwrap(), 32, "0.0.0.0".parse().unwrap(), 0));
+        assert!(is_subnet(
+            "1.2.3.4".parse().unwrap(),
+            32,
+            "0.0.0.0".parse().unwrap(),
+            0
+        ));
     }
 }

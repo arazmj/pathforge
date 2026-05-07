@@ -1,9 +1,9 @@
+use anyhow::Result;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
-use anyhow::Result;
 use tracing::{info, warn};
 
 use crate::fsm::BgpState;
@@ -51,7 +51,12 @@ pub struct MgmtServer {
 }
 
 impl MgmtServer {
-    pub fn new(socket_path: &str, state: Arc<RwLock<MgmtState>>, rib: Arc<RwLock<Rib>>, metrics: Arc<Metrics>) -> Self {
+    pub fn new(
+        socket_path: &str,
+        state: Arc<RwLock<MgmtState>>,
+        rib: Arc<RwLock<Rib>>,
+        metrics: Arc<Metrics>,
+    ) -> Self {
         Self {
             socket_path: socket_path.to_string(),
             state,
@@ -104,7 +109,12 @@ async fn handle_mgmt_conn(
     Ok(())
 }
 
-fn process_command(cmd: &str, state: &Arc<RwLock<MgmtState>>, rib: &Arc<RwLock<Rib>>, metrics: &Arc<Metrics>) -> String {
+fn process_command(
+    cmd: &str,
+    state: &Arc<RwLock<MgmtState>>,
+    rib: &Arc<RwLock<Rib>>,
+    metrics: &Arc<Metrics>,
+) -> String {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     match parts.as_slice() {
         ["show", "bgp", "summary"] => cmd_bgp_summary(state, rib),
@@ -116,7 +126,10 @@ fn process_command(cmd: &str, state: &Arc<RwLock<MgmtState>>, rib: &Arc<RwLock<R
         ["metrics"] => metrics.prometheus_text(),
         ["help"] | [] => cmd_help(),
         ["quit"] | ["exit"] => "Bye!\n".to_string(),
-        _ => format!("Unknown command: '{}'\nType 'help' for available commands.\n", cmd),
+        _ => format!(
+            "Unknown command: '{}'\nType 'help' for available commands.\n",
+            cmd
+        ),
     }
 }
 
@@ -129,7 +142,10 @@ fn cmd_bgp_summary(state: &Arc<RwLock<MgmtState>>, rib: &Arc<RwLock<Rib>>) -> St
     out.push_str("BGP Summary\n");
     out.push_str("===========\n");
     out.push_str(&format!("Total prefixes in Loc-RIB: {}\n\n", loc_count));
-    out.push_str(&format!("{:<22} {:>8} {:>12} {}\n", "Neighbor", "AS", "State", "Description"));
+    out.push_str(&format!(
+        "{:<22} {:>8} {:>12} {}\n",
+        "Neighbor", "AS", "State", "Description"
+    ));
     out.push_str(&format!("{}\n", "-".repeat(70)));
 
     for peer in state.peers.values() {
@@ -159,8 +175,10 @@ fn cmd_bgp_rib(rib: &Arc<RwLock<Rib>>) -> String {
     let mut out = String::new();
     out.push_str("BGP Routing Table (Loc-RIB)\n");
     out.push_str("===========================\n");
-    out.push_str(&format!("{:<20} {:>8} {:>6} {:>6} {:<20} {}\n",
-        "Network", "Local-Pref", "MED", "AS-Path", "Next-Hop", "Origin"));
+    out.push_str(&format!(
+        "{:<20} {:>8} {:>6} {:>6} {:<20} {}\n",
+        "Network", "Local-Pref", "MED", "AS-Path", "Next-Hop", "Origin"
+    ));
     out.push_str(&format!("{}\n", "-".repeat(80)));
 
     let mut prefixes: Vec<_> = loc_rib.iter().collect();
@@ -169,18 +187,37 @@ fn cmd_bgp_rib(rib: &Arc<RwLock<Rib>>) -> String {
     for (key, route) in &prefixes {
         let lp = route.attrs.local_pref.unwrap_or(100);
         let med = route.attrs.multi_exit_disc.unwrap_or(0);
-        let nh = route.attrs.next_hop.map(|a| a.to_string()).unwrap_or_else(|| "-".into());
-        let origin = route.attrs.origin.map(|o| format!("{}", o)).unwrap_or_else(|| "?".into());
-        let as_path: String = route.attrs.as_path.iter()
+        let nh = route
+            .attrs
+            .next_hop
+            .map(|a| a.to_string())
+            .unwrap_or_else(|| "-".into());
+        let origin = route
+            .attrs
+            .origin
+            .map(|o| format!("{}", o))
+            .unwrap_or_else(|| "?".into());
+        let as_path: String = route
+            .attrs
+            .as_path
+            .iter()
             .flat_map(|seg| seg.as_numbers())
             .map(|asn| asn.to_string())
             .collect::<Vec<_>>()
             .join(" ");
 
-        out.push_str(&format!("{:<20} {:>10} {:>6} {:>6} {:<20} {}\n",
-            key.to_string(), lp, med,
-            if as_path.is_empty() { "-".into() } else { as_path },
-            nh, origin,
+        out.push_str(&format!(
+            "{:<20} {:>10} {:>6} {:>6} {:<20} {}\n",
+            key.to_string(),
+            lp,
+            med,
+            if as_path.is_empty() {
+                "-".into()
+            } else {
+                as_path
+            },
+            nh,
+            origin,
         ));
     }
     out
@@ -203,24 +240,62 @@ fn cmd_bgp_rib_prefix(rib: &Arc<RwLock<Rib>>, prefix_str: &str) -> String {
         Err(_) => return format!("Invalid prefix length: '{}'\n", len_s),
     };
 
-    let key = PrefixKey { address: addr, prefix_len: len };
+    let key = PrefixKey {
+        address: addr,
+        prefix_len: len,
+    };
     match rib.loc_rib().get(&key) {
         Some(route) => {
             let mut out = format!("BGP Prefix {}\n", prefix_str);
             out.push_str(&format!("  Best path from:  {}\n", route.peer_addr));
             out.push_str(&format!("  Peer AS:         {}\n", route.peer_as));
-            out.push_str(&format!("  Next-hop:        {}\n", route.attrs.next_hop.map(|a| a.to_string()).unwrap_or("-".into())));
-            out.push_str(&format!("  Local-pref:      {}\n", route.attrs.local_pref.unwrap_or(100)));
-            out.push_str(&format!("  MED:             {}\n", route.attrs.multi_exit_disc.unwrap_or(0)));
-            out.push_str(&format!("  Origin:          {}\n", route.attrs.origin.map(|o| format!("{}", o)).unwrap_or("?".into())));
-            let as_path: String = route.attrs.as_path.iter()
+            out.push_str(&format!(
+                "  Next-hop:        {}\n",
+                route
+                    .attrs
+                    .next_hop
+                    .map(|a| a.to_string())
+                    .unwrap_or("-".into())
+            ));
+            out.push_str(&format!(
+                "  Local-pref:      {}\n",
+                route.attrs.local_pref.unwrap_or(100)
+            ));
+            out.push_str(&format!(
+                "  MED:             {}\n",
+                route.attrs.multi_exit_disc.unwrap_or(0)
+            ));
+            out.push_str(&format!(
+                "  Origin:          {}\n",
+                route
+                    .attrs
+                    .origin
+                    .map(|o| format!("{}", o))
+                    .unwrap_or("?".into())
+            ));
+            let as_path: String = route
+                .attrs
+                .as_path
+                .iter()
                 .flat_map(|seg| seg.as_numbers())
                 .map(|n| n.to_string())
                 .collect::<Vec<_>>()
                 .join(" ");
-            out.push_str(&format!("  AS-path:         {}\n", if as_path.is_empty() { "(empty)".into() } else { as_path }));
+            out.push_str(&format!(
+                "  AS-path:         {}\n",
+                if as_path.is_empty() {
+                    "(empty)".into()
+                } else {
+                    as_path
+                }
+            ));
             if !route.attrs.communities.is_empty() {
-                let comms: Vec<_> = route.attrs.communities.iter().map(|c| c.to_string()).collect();
+                let comms: Vec<_> = route
+                    .attrs
+                    .communities
+                    .iter()
+                    .map(|c| c.to_string())
+                    .collect();
                 out.push_str(&format!("  Communities:     {}\n", comms.join(" ")));
             }
             out
@@ -234,7 +309,11 @@ fn cmd_bgp_neighbors(state: &Arc<RwLock<MgmtState>>, filter_ip: Option<&&str>) -
     let mut out = String::new();
 
     let peers: Vec<&PeerInfo> = if let Some(ip) = filter_ip {
-        state.peers.values().filter(|p| p.addr.ip().to_string() == *ip).collect()
+        state
+            .peers
+            .values()
+            .filter(|p| p.addr.ip().to_string() == *ip)
+            .collect()
     } else {
         state.peers.values().collect()
     };
@@ -328,11 +407,13 @@ mod tests {
         let rib_arc = empty_rib();
         {
             let mut rib = rib_arc.write().unwrap();
-            let mut attrs = PathAttributes::default();
-            attrs.origin = Some(Origin::Igp);
-            attrs.local_pref = Some(100);
-            attrs.next_hop = Some(Ipv4Addr::new(10, 0, 0, 1));
-            attrs.as_path = vec![AsPathSegment::AsSequence(vec![65001, 65002])];
+            let attrs = PathAttributes {
+                origin: Some(Origin::Igp),
+                local_pref: Some(100),
+                next_hop: Some(Ipv4Addr::new(10, 0, 0, 1)),
+                as_path: vec![AsPathSegment::AsSequence(vec![65001, 65002])],
+                ..Default::default()
+            };
             let prefix = Prefix::new(Ipv4Addr::new(192, 168, 0, 0), 24);
             let peer: SocketAddr = "10.0.0.2:179".parse().unwrap();
             rib.process_update(peer, 65001, &[prefix], &attrs, &[]);

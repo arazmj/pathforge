@@ -1,5 +1,5 @@
-use bytes::BytesMut;
 use super::{Header, MessageType, HEADER_LEN};
+use bytes::BytesMut;
 
 /// BGP KEEPALIVE message (RFC 4271 §4.4).
 ///

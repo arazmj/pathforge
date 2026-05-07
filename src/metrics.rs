@@ -78,38 +78,122 @@ impl Metrics {
 
         macro_rules! gauge {
             ($name:expr, $help:expr, $counter:expr) => {
-                out.push_str(&format!("# HELP {} {}\n# TYPE {} gauge\n{} {}\n",
-                    $name, $help, $name, $name, self.get($counter)));
+                out.push_str(&format!(
+                    "# HELP {} {}\n# TYPE {} gauge\n{} {}\n",
+                    $name,
+                    $help,
+                    $name,
+                    $name,
+                    self.get($counter)
+                ));
             };
         }
         macro_rules! counter {
             ($name:expr, $help:expr, $counter:expr) => {
-                out.push_str(&format!("# HELP {} {}\n# TYPE {} counter\n{} {}\n",
-                    $name, $help, $name, $name, self.get($counter)));
+                out.push_str(&format!(
+                    "# HELP {} {}\n# TYPE {} counter\n{} {}\n",
+                    $name,
+                    $help,
+                    $name,
+                    $name,
+                    self.get($counter)
+                ));
             };
         }
 
-        gauge!("bgp_sessions_active", "Currently active BGP sessions", &self.sessions_active);
-        counter!("bgp_sessions_established_total", "Total BGP sessions ever established", &self.sessions_established);
-        counter!("bgp_sessions_failed_total", "Total BGP session failures", &self.sessions_failed);
+        gauge!(
+            "bgp_sessions_active",
+            "Currently active BGP sessions",
+            &self.sessions_active
+        );
+        counter!(
+            "bgp_sessions_established_total",
+            "Total BGP sessions ever established",
+            &self.sessions_established
+        );
+        counter!(
+            "bgp_sessions_failed_total",
+            "Total BGP session failures",
+            &self.sessions_failed
+        );
 
-        counter!("bgp_messages_received_total{type=\"open\"}", "OPEN messages received", &self.messages_rx_open);
-        counter!("bgp_messages_received_total{type=\"keepalive\"}", "KEEPALIVE messages received", &self.messages_rx_keepalive);
-        counter!("bgp_messages_received_total{type=\"update\"}", "UPDATE messages received", &self.messages_rx_update);
-        counter!("bgp_messages_received_total{type=\"notification\"}", "NOTIFICATION messages received", &self.messages_rx_notification);
-        counter!("bgp_messages_sent_total{type=\"open\"}", "OPEN messages sent", &self.messages_tx_open);
-        counter!("bgp_messages_sent_total{type=\"keepalive\"}", "KEEPALIVE messages sent", &self.messages_tx_keepalive);
-        counter!("bgp_messages_sent_total{type=\"update\"}", "UPDATE messages sent", &self.messages_tx_update);
-        counter!("bgp_messages_sent_total{type=\"notification\"}", "NOTIFICATION messages sent", &self.messages_tx_notification);
+        counter!(
+            "bgp_messages_received_total{type=\"open\"}",
+            "OPEN messages received",
+            &self.messages_rx_open
+        );
+        counter!(
+            "bgp_messages_received_total{type=\"keepalive\"}",
+            "KEEPALIVE messages received",
+            &self.messages_rx_keepalive
+        );
+        counter!(
+            "bgp_messages_received_total{type=\"update\"}",
+            "UPDATE messages received",
+            &self.messages_rx_update
+        );
+        counter!(
+            "bgp_messages_received_total{type=\"notification\"}",
+            "NOTIFICATION messages received",
+            &self.messages_rx_notification
+        );
+        counter!(
+            "bgp_messages_sent_total{type=\"open\"}",
+            "OPEN messages sent",
+            &self.messages_tx_open
+        );
+        counter!(
+            "bgp_messages_sent_total{type=\"keepalive\"}",
+            "KEEPALIVE messages sent",
+            &self.messages_tx_keepalive
+        );
+        counter!(
+            "bgp_messages_sent_total{type=\"update\"}",
+            "UPDATE messages sent",
+            &self.messages_tx_update
+        );
+        counter!(
+            "bgp_messages_sent_total{type=\"notification\"}",
+            "NOTIFICATION messages sent",
+            &self.messages_tx_notification
+        );
 
-        counter!("bgp_routes_received_total", "Total routes received (NLRI)", &self.routes_received);
-        counter!("bgp_routes_withdrawn_total", "Total routes withdrawn", &self.routes_withdrawn);
-        gauge!("bgp_routes_loc_rib", "Current routes in Loc-RIB", &self.routes_loc_rib);
-        counter!("bgp_routes_advertised_total", "Total routes advertised to peers", &self.routes_advertised);
+        counter!(
+            "bgp_routes_received_total",
+            "Total routes received (NLRI)",
+            &self.routes_received
+        );
+        counter!(
+            "bgp_routes_withdrawn_total",
+            "Total routes withdrawn",
+            &self.routes_withdrawn
+        );
+        gauge!(
+            "bgp_routes_loc_rib",
+            "Current routes in Loc-RIB",
+            &self.routes_loc_rib
+        );
+        counter!(
+            "bgp_routes_advertised_total",
+            "Total routes advertised to peers",
+            &self.routes_advertised
+        );
 
-        counter!("bgp_hold_timer_expirations_total", "Hold timer expiration events", &self.hold_timer_expirations);
-        counter!("bgp_parse_errors_total", "BGP message parse errors", &self.parse_errors);
-        counter!("bgp_fsm_errors_total", "BGP FSM state errors", &self.fsm_errors);
+        counter!(
+            "bgp_hold_timer_expirations_total",
+            "Hold timer expiration events",
+            &self.hold_timer_expirations
+        );
+        counter!(
+            "bgp_parse_errors_total",
+            "BGP message parse errors",
+            &self.parse_errors
+        );
+        counter!(
+            "bgp_fsm_errors_total",
+            "BGP FSM state errors",
+            &self.fsm_errors
+        );
 
         out
     }

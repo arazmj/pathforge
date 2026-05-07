@@ -41,7 +41,10 @@ pub struct PrefixKey {
 
 impl From<&Prefix> for PrefixKey {
     fn from(p: &Prefix) -> Self {
-        PrefixKey { address: p.address, prefix_len: p.prefix_len }
+        PrefixKey {
+            address: p.address,
+            prefix_len: p.prefix_len,
+        }
     }
 }
 
@@ -108,7 +111,9 @@ impl Rib {
         }
 
         // Re-run decision process for affected prefixes
-        let affected: Vec<PrefixKey> = nlri.iter().chain(withdrawn.iter())
+        let affected: Vec<PrefixKey> = nlri
+            .iter()
+            .chain(withdrawn.iter())
             .map(PrefixKey::from)
             .collect();
         for key in affected {
@@ -126,7 +131,9 @@ impl Rib {
     /// 5. Prefer eBGP over iBGP (not applicable here without full peer info)
     /// 6. Oldest route (lowest received_at) as final tiebreaker
     fn run_decision_process(&mut self, key: &PrefixKey) {
-        let mut candidates: Vec<&Route> = self.adj_rib_in.values()
+        let mut candidates: Vec<&Route> = self
+            .adj_rib_in
+            .values()
             .filter_map(|rib| rib.get(key))
             .collect();
 
@@ -150,7 +157,12 @@ impl Rib {
                     a_origin.cmp(&b_origin)
                 })
                 // 4. Lowest MED
-                .then(a.attrs.multi_exit_disc.unwrap_or(0).cmp(&b.attrs.multi_exit_disc.unwrap_or(0)))
+                .then(
+                    a.attrs
+                        .multi_exit_disc
+                        .unwrap_or(0)
+                        .cmp(&b.attrs.multi_exit_disc.unwrap_or(0)),
+                )
                 // 5. Oldest route
                 .then(a.received_at.cmp(&b.received_at))
         });
@@ -161,7 +173,8 @@ impl Rib {
 
     /// Remove all routes from a disconnected peer.
     pub fn remove_peer(&mut self, peer_addr: SocketAddr) -> Vec<PrefixKey> {
-        let removed_keys: Vec<PrefixKey> = self.adj_rib_in
+        let removed_keys: Vec<PrefixKey> = self
+            .adj_rib_in
             .remove(&peer_addr)
             .map(|rib| rib.into_keys().collect())
             .unwrap_or_default();
@@ -199,15 +212,24 @@ mod tests {
     use super::*;
     use crate::attr::{AsPathSegment, Origin};
 
-    fn make_route(prefix: Prefix, peer: SocketAddr, local_pref: u32, as_path_len: usize) -> (Prefix, PathAttributes) {
-        let mut attrs = PathAttributes::default();
-        attrs.origin = Some(Origin::Igp);
-        attrs.local_pref = Some(local_pref);
-        if as_path_len > 0 {
-            attrs.as_path = vec![AsPathSegment::AsSequence(
-                (65001u32..).take(as_path_len).collect()
-            )];
-        }
+    fn make_route(
+        prefix: Prefix,
+        peer: SocketAddr,
+        local_pref: u32,
+        as_path_len: usize,
+    ) -> (Prefix, PathAttributes) {
+        let attrs = PathAttributes {
+            origin: Some(Origin::Igp),
+            local_pref: Some(local_pref),
+            as_path: if as_path_len > 0 {
+                vec![AsPathSegment::AsSequence(
+                    (65001u32..).take(as_path_len).collect(),
+                )]
+            } else {
+                vec![]
+            },
+            ..Default::default()
+        };
         (prefix, attrs)
     }
 
@@ -219,9 +241,11 @@ mod tests {
     fn test_basic_route_insertion() {
         let mut rib = Rib::new();
         let prefix = Prefix::new(Ipv4Addr::new(10, 0, 0, 0), 8);
-        let mut attrs = PathAttributes::default();
-        attrs.origin = Some(Origin::Igp);
-        attrs.local_pref = Some(100);
+        let attrs = PathAttributes {
+            origin: Some(Origin::Igp),
+            local_pref: Some(100),
+            ..Default::default()
+        };
 
         rib.process_update(peer(1), 65001, &[prefix.clone()], &attrs, &[]);
         assert_eq!(rib.prefix_count(), 1);
@@ -234,12 +258,16 @@ mod tests {
         let mut rib = Rib::new();
         let prefix = Prefix::new(Ipv4Addr::new(192, 168, 0, 0), 24);
 
-        let mut attrs_low = PathAttributes::default();
-        attrs_low.local_pref = Some(50);
+        let attrs_low = PathAttributes {
+            local_pref: Some(50),
+            ..Default::default()
+        };
         rib.process_update(peer(1), 65001, &[prefix.clone()], &attrs_low, &[]);
 
-        let mut attrs_high = PathAttributes::default();
-        attrs_high.local_pref = Some(200);
+        let attrs_high = PathAttributes {
+            local_pref: Some(200),
+            ..Default::default()
+        };
         rib.process_update(peer(2), 65002, &[prefix.clone()], &attrs_high, &[]);
 
         let best = rib.loc_rib().get(&PrefixKey::from(&prefix)).unwrap();
@@ -251,14 +279,18 @@ mod tests {
         let mut rib = Rib::new();
         let prefix = Prefix::new(Ipv4Addr::new(172, 16, 0, 0), 16);
 
-        let mut attrs_long = PathAttributes::default();
-        attrs_long.local_pref = Some(100);
-        attrs_long.as_path = vec![AsPathSegment::AsSequence(vec![65001, 65002, 65003])];
+        let attrs_long = PathAttributes {
+            local_pref: Some(100),
+            as_path: vec![AsPathSegment::AsSequence(vec![65001, 65002, 65003])],
+            ..Default::default()
+        };
         rib.process_update(peer(1), 65001, &[prefix.clone()], &attrs_long, &[]);
 
-        let mut attrs_short = PathAttributes::default();
-        attrs_short.local_pref = Some(100);
-        attrs_short.as_path = vec![AsPathSegment::AsSequence(vec![65004])];
+        let attrs_short = PathAttributes {
+            local_pref: Some(100),
+            as_path: vec![AsPathSegment::AsSequence(vec![65004])],
+            ..Default::default()
+        };
         rib.process_update(peer(2), 65002, &[prefix.clone()], &attrs_short, &[]);
 
         let best = rib.loc_rib().get(&PrefixKey::from(&prefix)).unwrap();

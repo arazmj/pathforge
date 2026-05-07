@@ -1,7 +1,7 @@
+use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
-use anyhow::{Context, Result};
 
 /// Top-level PathForge configuration.
 #[derive(Debug, Clone, Deserialize)]
@@ -112,8 +112,8 @@ impl Config {
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
         let content = std::fs::read_to_string(path.as_ref())
             .with_context(|| format!("Failed to read config file: {}", path.as_ref().display()))?;
-        let config: Config = toml::from_str(&content)
-            .with_context(|| "Failed to parse TOML configuration")?;
+        let config: Config =
+            toml::from_str(&content).with_context(|| "Failed to parse TOML configuration")?;
         config.validate()?;
         Ok(config)
     }

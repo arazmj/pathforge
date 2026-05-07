@@ -13,28 +13,41 @@ pub struct Prefix {
 
 impl Prefix {
     pub fn new(address: Ipv4Addr, prefix_len: u8) -> Self {
-        Self { address, prefix_len }
+        Self {
+            address,
+            prefix_len,
+        }
     }
 
     /// Number of bytes needed to encode the prefix (ceil(prefix_len / 8)).
     pub fn encoded_len(&self) -> usize {
-        ((self.prefix_len as usize) + 7) / 8
+        (self.prefix_len as usize).div_ceil(8)
     }
 
     pub fn parse(buf: &mut impl Buf) -> Result<Self, MessageError> {
         if buf.remaining() < 1 {
-            return Err(MessageError::TooShort { expected: 1, got: 0 });
+            return Err(MessageError::TooShort {
+                expected: 1,
+                got: 0,
+            });
         }
         let prefix_len = buf.get_u8();
-        let byte_len = ((prefix_len as usize) + 7) / 8;
+        let byte_len = (prefix_len as usize).div_ceil(8);
         if buf.remaining() < byte_len {
-            return Err(MessageError::TooShort { expected: byte_len, got: buf.remaining() });
+            return Err(MessageError::TooShort {
+                expected: byte_len,
+                got: buf.remaining(),
+            });
         }
         let mut addr_bytes = [0u8; 4];
-        for i in 0..byte_len {
-            addr_bytes[i] = buf.get_u8();
-        }
-        Ok(Prefix { prefix_len, address: Ipv4Addr::from(addr_bytes) })
+        addr_bytes
+            .iter_mut()
+            .take(byte_len)
+            .for_each(|b| *b = buf.get_u8());
+        Ok(Prefix {
+            prefix_len,
+            address: Ipv4Addr::from(addr_bytes),
+        })
     }
 
     pub fn serialize(&self, buf: &mut BytesMut) {
@@ -73,13 +86,19 @@ impl UpdateMessage {
     /// Parse UPDATE body (excluding header).
     pub fn parse(mut body: impl Buf) -> Result<Self, MessageError> {
         if body.remaining() < 4 {
-            return Err(MessageError::TooShort { expected: 4, got: body.remaining() });
+            return Err(MessageError::TooShort {
+                expected: 4,
+                got: body.remaining(),
+            });
         }
 
         // Withdrawn routes
         let withdrawn_len = body.get_u16() as usize;
         if body.remaining() < withdrawn_len {
-            return Err(MessageError::TooShort { expected: withdrawn_len, got: body.remaining() });
+            return Err(MessageError::TooShort {
+                expected: withdrawn_len,
+                got: body.remaining(),
+            });
         }
         let mut withdrawn_buf = body.copy_to_bytes(withdrawn_len);
         let mut withdrawn_routes = vec![];
@@ -90,11 +109,14 @@ impl UpdateMessage {
         // Path attributes
         let attr_len = body.get_u16() as usize;
         if body.remaining() < attr_len {
-            return Err(MessageError::TooShort { expected: attr_len, got: body.remaining() });
+            return Err(MessageError::TooShort {
+                expected: attr_len,
+                got: body.remaining(),
+            });
         }
         let attr_bytes = body.copy_to_bytes(attr_len);
-        let path_attributes = PathAttributes::parse(attr_bytes)
-            .map_err(|e| MessageError::Parse(e.to_string()))?;
+        let path_attributes =
+            PathAttributes::parse(attr_bytes).map_err(|e| MessageError::Parse(e.to_string()))?;
 
         // NLRI (remaining bytes)
         let mut nlri = vec![];
@@ -102,7 +124,11 @@ impl UpdateMessage {
             nlri.push(Prefix::parse(&mut body)?);
         }
 
-        Ok(Self { withdrawn_routes, path_attributes, nlri })
+        Ok(Self {
+            withdrawn_routes,
+            path_attributes,
+            nlri,
+        })
     }
 
     /// Serialize UPDATE message (header + body).
@@ -184,7 +210,8 @@ mod tests {
     #[test]
     fn test_withdrawn_routes() {
         let mut msg = UpdateMessage::new();
-        msg.withdrawn_routes.push(Prefix::new(Ipv4Addr::new(192, 168, 0, 0), 16));
+        msg.withdrawn_routes
+            .push(Prefix::new(Ipv4Addr::new(192, 168, 0, 0), 16));
         let serialized = msg.serialize();
         let body = serialized.freeze().slice(HEADER_LEN..);
         let parsed = UpdateMessage::parse(body).unwrap();

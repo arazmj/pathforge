@@ -1,7 +1,9 @@
-mod fsm;
+#![allow(dead_code, unused_imports, unused_variables)]
+
 mod attr;
 mod capabilities;
 mod config;
+mod fsm;
 mod message;
 mod metrics;
 mod mgmt;
@@ -18,13 +20,16 @@ use clap::Parser;
 use std::net::{Ipv4Addr, SocketAddr};
 use tracing_subscriber::EnvFilter;
 
-use mgmt::{MgmtServer, MgmtState};
 use metrics::Metrics;
+use mgmt::{MgmtServer, MgmtState};
 use server::Server;
 use timer::LocalConfig;
 
 #[derive(Parser, Debug)]
-#[command(name = "pathforge", about = "PathForge — A BGP-4 daemon written in Rust 🦀")]
+#[command(
+    name = "pathforge",
+    about = "PathForge — A BGP-4 daemon written in Rust 🦀"
+)]
 struct Cli {
     /// Path to TOML configuration file
     #[arg(short, long)]

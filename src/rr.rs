@@ -27,7 +27,10 @@ pub struct RrConfig {
 
 impl RrConfig {
     pub fn new(cluster_id: Ipv4Addr) -> Self {
-        Self { cluster_id, enabled: true }
+        Self {
+            cluster_id,
+            enabled: true,
+        }
     }
 }
 
@@ -68,7 +71,7 @@ impl RouteReflector {
         }
         match (source_role, target_role) {
             // From eBGP peer or client → reflect to everyone
-            (RrRole::None, _) => true,      // eBGP → all iBGP
+            (RrRole::None, _) => true, // eBGP → all iBGP
             (RrRole::Client, RrRole::Client) => true,
             (RrRole::Client, RrRole::NonClient) => true,
             // From non-client → reflect only to clients
@@ -169,20 +172,26 @@ mod tests {
     #[test]
     fn test_cluster_loop_detection() {
         let rr = make_rr();
-        let mut attrs = PathAttributes::default();
-        attrs.cluster_list = vec![Ipv4Addr::new(10, 0, 0, 1)]; // same as cluster_id
+        let attrs = PathAttributes {
+            cluster_list: vec![Ipv4Addr::new(10, 0, 0, 1)],
+            ..Default::default()
+        };
         assert!(rr.has_cluster_loop(&attrs));
 
-        let mut attrs2 = PathAttributes::default();
-        attrs2.cluster_list = vec![Ipv4Addr::new(10, 0, 0, 99)]; // different
+        let attrs2 = PathAttributes {
+            cluster_list: vec![Ipv4Addr::new(10, 0, 0, 99)],
+            ..Default::default()
+        };
         assert!(!rr.has_cluster_loop(&attrs2));
     }
 
     #[test]
     fn test_originator_loop_detection() {
         let rr = make_rr();
-        let mut attrs = PathAttributes::default();
-        attrs.originator_id = Some(Ipv4Addr::new(10, 0, 0, 1)); // same as router_id
+        let attrs = PathAttributes {
+            originator_id: Some(Ipv4Addr::new(10, 0, 0, 1)),
+            ..Default::default()
+        };
         assert!(rr.has_originator_loop(&attrs));
     }
 
@@ -200,8 +209,10 @@ mod tests {
     #[test]
     fn test_cluster_list_prepend() {
         let rr = make_rr();
-        let mut attrs = PathAttributes::default();
-        attrs.cluster_list = vec![Ipv4Addr::new(10, 0, 0, 99)];
+        let attrs = PathAttributes {
+            cluster_list: vec![Ipv4Addr::new(10, 0, 0, 99)],
+            ..Default::default()
+        };
         let reflected = rr.prepare_reflected_attrs(&attrs, Ipv4Addr::new(10, 0, 0, 5));
         // Our cluster ID prepended
         assert_eq!(reflected.cluster_list[0], Ipv4Addr::new(10, 0, 0, 1));
@@ -211,9 +222,11 @@ mod tests {
     #[test]
     fn test_originator_id_not_overwritten() {
         let rr = make_rr();
-        let mut attrs = PathAttributes::default();
         let existing_originator = Ipv4Addr::new(10, 0, 0, 50);
-        attrs.originator_id = Some(existing_originator);
+        let attrs = PathAttributes {
+            originator_id: Some(existing_originator),
+            ..Default::default()
+        };
         let reflected = rr.prepare_reflected_attrs(&attrs, Ipv4Addr::new(10, 0, 0, 99));
         // Should NOT be overwritten
         assert_eq!(reflected.originator_id, Some(existing_originator));

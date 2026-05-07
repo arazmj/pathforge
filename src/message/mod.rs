@@ -1,9 +1,9 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use thiserror::Error;
 
-pub mod open;
 pub mod keepalive;
 pub mod notification;
+pub mod open;
 pub mod route_refresh;
 pub mod update;
 
@@ -70,7 +70,10 @@ impl Header {
     /// Parse a BGP header from a buffer of at least 19 bytes.
     pub fn parse(buf: &mut impl Buf) -> Result<Self, MessageError> {
         if buf.remaining() < HEADER_LEN {
-            return Err(MessageError::TooShort { expected: HEADER_LEN, got: buf.remaining() });
+            return Err(MessageError::TooShort {
+                expected: HEADER_LEN,
+                got: buf.remaining(),
+            });
         }
         let mut marker = [0u8; 16];
         buf.copy_to_slice(&mut marker);
@@ -138,6 +141,9 @@ mod tests {
     #[test]
     fn test_invalid_marker() {
         let mut buf = BytesMut::from(&[0u8; 19][..]);
-        assert!(matches!(Header::parse(&mut buf), Err(MessageError::InvalidMarker)));
+        assert!(matches!(
+            Header::parse(&mut buf),
+            Err(MessageError::InvalidMarker)
+        ));
     }
 }

@@ -64,40 +64,51 @@ pub struct MpPrefix {
 
 impl MpPrefix {
     pub fn ipv4(addr: Ipv4Addr, len: u8) -> Self {
-        Self { afi: Afi::Ipv4, prefix_len: len, address: IpAddr::V4(addr) }
+        Self {
+            afi: Afi::Ipv4,
+            prefix_len: len,
+            address: IpAddr::V4(addr),
+        }
     }
 
     pub fn ipv6(addr: Ipv6Addr, len: u8) -> Self {
-        Self { afi: Afi::Ipv6, prefix_len: len, address: IpAddr::V6(addr) }
+        Self {
+            afi: Afi::Ipv6,
+            prefix_len: len,
+            address: IpAddr::V6(addr),
+        }
     }
 
     pub fn encoded_len(&self) -> usize {
-        let addr_bytes = match self.afi {
-            Afi::Ipv4 => 4usize,
-            Afi::Ipv6 => 16,
-        };
-        let _ = addr_bytes;
-        ((self.prefix_len as usize) + 7) / 8
+        (self.prefix_len as usize).div_ceil(8)
     }
 
     pub fn parse(buf: &mut impl Buf, afi: Afi) -> Result<Self, MpError> {
-        if buf.remaining() < 1 { return Err(MpError::TooShort); }
+        if buf.remaining() < 1 {
+            return Err(MpError::TooShort);
+        }
         let prefix_len = buf.get_u8();
-        let byte_len = ((prefix_len as usize) + 7) / 8;
-        if buf.remaining() < byte_len { return Err(MpError::TooShort); }
+        let byte_len = (prefix_len as usize).div_ceil(8);
+        if buf.remaining() < byte_len {
+            return Err(MpError::TooShort);
+        }
         let address = match afi {
             Afi::Ipv4 => {
                 let mut b = [0u8; 4];
-                for i in 0..byte_len { b[i] = buf.get_u8(); }
+                b.iter_mut().take(byte_len).for_each(|x| *x = buf.get_u8());
                 IpAddr::V4(Ipv4Addr::from(b))
             }
             Afi::Ipv6 => {
                 let mut b = [0u8; 16];
-                for i in 0..byte_len { b[i] = buf.get_u8(); }
+                b.iter_mut().take(byte_len).for_each(|x| *x = buf.get_u8());
                 IpAddr::V6(Ipv6Addr::from(b))
             }
         };
-        Ok(Self { afi, prefix_len, address })
+        Ok(Self {
+            afi,
+            prefix_len,
+            address,
+        })
     }
 
     pub fn serialize(&self, buf: &mut BytesMut) {
@@ -131,16 +142,25 @@ pub struct MpReachNlri {
 
 impl MpReachNlri {
     pub fn new(afi: Afi, safi: Safi, next_hop: IpAddr) -> Self {
-        Self { afi, safi, next_hops: vec![next_hop], nlri: vec![] }
+        Self {
+            afi,
+            safi,
+            next_hops: vec![next_hop],
+            nlri: vec![],
+        }
     }
 
     /// Parse MP_REACH_NLRI attribute value.
     pub fn parse(mut buf: impl Buf) -> Result<Self, MpError> {
-        if buf.remaining() < 4 { return Err(MpError::TooShort); }
+        if buf.remaining() < 4 {
+            return Err(MpError::TooShort);
+        }
         let afi = Afi::try_from(buf.get_u16())?;
         let safi = Safi::try_from(buf.get_u8())?;
         let nh_len = buf.get_u8() as usize;
-        if buf.remaining() < nh_len { return Err(MpError::TooShort); }
+        if buf.remaining() < nh_len {
+            return Err(MpError::TooShort);
+        }
 
         let mut next_hops = vec![];
         let nh_bytes = buf.copy_to_bytes(nh_len);
@@ -165,7 +185,12 @@ impl MpReachNlri {
         while buf.remaining() > 0 {
             nlri.push(MpPrefix::parse(&mut buf, afi)?);
         }
-        Ok(Self { afi, safi, next_hops, nlri })
+        Ok(Self {
+            afi,
+            safi,
+            next_hops,
+            nlri,
+        })
     }
 
     /// Serialize MP_REACH_NLRI as raw attribute bytes (without outer flags/type/len).
@@ -205,18 +230,28 @@ pub struct MpUnreachNlri {
 
 impl MpUnreachNlri {
     pub fn new(afi: Afi, safi: Safi) -> Self {
-        Self { afi, safi, withdrawn: vec![] }
+        Self {
+            afi,
+            safi,
+            withdrawn: vec![],
+        }
     }
 
     pub fn parse(mut buf: impl Buf) -> Result<Self, MpError> {
-        if buf.remaining() < 3 { return Err(MpError::TooShort); }
+        if buf.remaining() < 3 {
+            return Err(MpError::TooShort);
+        }
         let afi = Afi::try_from(buf.get_u16())?;
         let safi = Safi::try_from(buf.get_u8())?;
         let mut withdrawn = vec![];
         while buf.remaining() > 0 {
             withdrawn.push(MpPrefix::parse(&mut buf, afi)?);
         }
-        Ok(Self { afi, safi, withdrawn })
+        Ok(Self {
+            afi,
+            safi,
+            withdrawn,
+        })
     }
 
     pub fn serialize(&self) -> BytesMut {
@@ -260,8 +295,12 @@ mod tests {
     fn test_mp_reach_nlri_roundtrip() {
         let nh: IpAddr = "2001:db8::1".parse().unwrap();
         let mut reach = MpReachNlri::new(Afi::Ipv6, Safi::Unicast, nh);
-        reach.nlri.push(MpPrefix::ipv6("2001:db8:1::".parse().unwrap(), 48));
-        reach.nlri.push(MpPrefix::ipv6("fd00::".parse().unwrap(), 8));
+        reach
+            .nlri
+            .push(MpPrefix::ipv6("2001:db8:1::".parse().unwrap(), 48));
+        reach
+            .nlri
+            .push(MpPrefix::ipv6("fd00::".parse().unwrap(), 8));
 
         let serialized = reach.serialize();
         let parsed = MpReachNlri::parse(Bytes::from(serialized)).unwrap();
@@ -275,7 +314,9 @@ mod tests {
     #[test]
     fn test_mp_unreach_nlri_roundtrip() {
         let mut unreach = MpUnreachNlri::new(Afi::Ipv6, Safi::Unicast);
-        unreach.withdrawn.push(MpPrefix::ipv6("2001:db8::".parse().unwrap(), 32));
+        unreach
+            .withdrawn
+            .push(MpPrefix::ipv6("2001:db8::".parse().unwrap(), 32));
         let serialized = unreach.serialize();
         let parsed = MpUnreachNlri::parse(Bytes::from(serialized)).unwrap();
         assert_eq!(parsed.afi, Afi::Ipv6);
@@ -287,7 +328,9 @@ mod tests {
     fn test_mp_reach_ipv4_roundtrip() {
         let nh: IpAddr = "10.0.0.1".parse().unwrap();
         let mut reach = MpReachNlri::new(Afi::Ipv4, Safi::Unicast, nh);
-        reach.nlri.push(MpPrefix::ipv4(Ipv4Addr::new(192, 168, 0, 0), 24));
+        reach
+            .nlri
+            .push(MpPrefix::ipv4(Ipv4Addr::new(192, 168, 0, 0), 24));
         let serialized = reach.serialize();
         let parsed = MpReachNlri::parse(Bytes::from(serialized)).unwrap();
         assert_eq!(parsed.afi, Afi::Ipv4);

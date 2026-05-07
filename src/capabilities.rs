@@ -35,7 +35,10 @@ impl Capability {
                 (1u8, vec![(afi >> 8) as u8, *afi as u8, 0, *safi])
             }
             Self::RouteRefresh => (2u8, vec![]),
-            Self::GracefulRestart { restart_time, flags } => {
+            Self::GracefulRestart {
+                restart_time,
+                flags,
+            } => {
                 let word = (((*flags as u16) & 0xF) << 12) | (restart_time & 0x0FFF);
                 (64u8, vec![(word >> 8) as u8, word as u8])
             }
@@ -68,7 +71,9 @@ impl Capability {
                     let cap_len = data[cap_pos + 1] as usize;
                     cap_pos += 2;
                     let cap_end = cap_pos + cap_len;
-                    if cap_end > data.len() { break; }
+                    if cap_end > data.len() {
+                        break;
+                    }
                     let cap_data = &data[cap_pos..cap_end];
                     let cap = Self::parse_one(cap_code, cap_data);
                     caps.push(cap);
@@ -97,7 +102,10 @@ impl Capability {
             65 if data.len() >= 4 => Capability::FourOctetAsn {
                 asn: u32::from_be_bytes([data[0], data[1], data[2], data[3]]),
             },
-            _ => Capability::Unknown { code, data: data.to_vec() },
+            _ => Capability::Unknown {
+                code,
+                data: data.to_vec(),
+            },
         }
     }
 }
@@ -107,7 +115,9 @@ impl fmt::Display for Capability {
         match self {
             Self::MultiProtocol { afi, safi } => write!(f, "MultiProtocol(AFI={afi}, SAFI={safi})"),
             Self::RouteRefresh => write!(f, "RouteRefresh"),
-            Self::GracefulRestart { restart_time, .. } => write!(f, "GracefulRestart(time={restart_time}s)"),
+            Self::GracefulRestart { restart_time, .. } => {
+                write!(f, "GracefulRestart(time={restart_time}s)")
+            }
             Self::FourOctetAsn { asn } => write!(f, "4-byte-ASN({asn})"),
             Self::Unknown { code, .. } => write!(f, "Unknown(code={code})"),
         }
@@ -126,8 +136,8 @@ pub fn build_capabilities(caps: &[Capability]) -> Vec<u8> {
     }
     // opt param: type=2, len=cap_bytes.len(), data
     let mut out = Vec::new();
-    out.push(2u8);                          // param type: Capability
-    out.push(cap_bytes.len() as u8);        // param length
+    out.push(2u8); // param type: Capability
+    out.push(cap_bytes.len() as u8); // param length
     out.extend_from_slice(&cap_bytes);
     // prepend total opt param length
     let mut result = vec![(out.len()) as u8];
@@ -166,10 +176,19 @@ mod tests {
 
     #[test]
     fn test_graceful_restart() {
-        let cap = Capability::GracefulRestart { restart_time: 120, flags: 0x8 };
+        let cap = Capability::GracefulRestart {
+            restart_time: 120,
+            flags: 0x8,
+        };
         let bytes = cap.to_bytes();
         let parsed = Capability::parse_one(64, &bytes[2..]);
-        assert!(matches!(parsed, Capability::GracefulRestart { restart_time: 120, .. }));
+        assert!(matches!(
+            parsed,
+            Capability::GracefulRestart {
+                restart_time: 120,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -196,6 +215,9 @@ mod tests {
     #[test]
     fn test_display() {
         assert_eq!(Capability::RouteRefresh.to_string(), "RouteRefresh");
-        assert_eq!(Capability::FourOctetAsn { asn: 65000 }.to_string(), "4-byte-ASN(65000)");
+        assert_eq!(
+            Capability::FourOctetAsn { asn: 65000 }.to_string(),
+            "4-byte-ASN(65000)"
+        );
     }
 }

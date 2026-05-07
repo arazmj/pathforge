@@ -41,7 +41,10 @@ impl OpenMessage {
     /// Parse OPEN message body (excluding header).
     pub fn parse(mut body: impl Buf) -> Result<Self, MessageError> {
         if body.remaining() < 10 {
-            return Err(MessageError::TooShort { expected: 10, got: body.remaining() });
+            return Err(MessageError::TooShort {
+                expected: 10,
+                got: body.remaining(),
+            });
         }
         let version = body.get_u8();
         let my_as = body.get_u16();
@@ -50,7 +53,10 @@ impl OpenMessage {
         let opt_param_len = body.get_u8() as usize;
 
         if body.remaining() < opt_param_len {
-            return Err(MessageError::TooShort { expected: opt_param_len, got: body.remaining() });
+            return Err(MessageError::TooShort {
+                expected: opt_param_len,
+                got: body.remaining(),
+            });
         }
 
         let mut optional_params = vec![];
@@ -68,7 +74,13 @@ impl OpenMessage {
             optional_params.push(OptionalParam { param_type, value });
         }
 
-        Ok(Self { version, my_as, hold_time, bgp_id, optional_params })
+        Ok(Self {
+            version,
+            my_as,
+            hold_time,
+            bgp_id,
+            optional_params,
+        })
     }
 
     /// Serialize OPEN message (header + body).
@@ -116,7 +128,10 @@ mod tests {
     #[test]
     fn test_open_with_optional_param() {
         let mut msg = OpenMessage::new(65000, 180, Ipv4Addr::new(1, 1, 1, 1));
-        msg.optional_params.push(OptionalParam { param_type: 2, value: vec![1, 4, 0, 1, 0, 1] });
+        msg.optional_params.push(OptionalParam {
+            param_type: 2,
+            value: vec![1, 4, 0, 1, 0, 1],
+        });
         let serialized = msg.serialize();
         let body = serialized.freeze().slice(HEADER_LEN..);
         let parsed = OpenMessage::parse(body).unwrap();

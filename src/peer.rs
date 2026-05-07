@@ -1,18 +1,18 @@
-use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
 use anyhow::Result;
 use bytes::BytesMut;
+use std::net::SocketAddr;
+use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, error, info, warn};
 
 use crate::fsm::{BgpEvent, BgpState};
-use crate::message::{BgpMessage, MessageType, HEADER_LEN};
 use crate::message::keepalive::KeepaliveMessage;
 use crate::message::notification::NotificationMessage;
 use crate::message::open::OpenMessage;
 use crate::message::update::UpdateMessage;
+use crate::message::{BgpMessage, MessageType, HEADER_LEN};
 use crate::rib::Rib;
 use crate::timer::{BgpTimers, LocalConfig};
 
@@ -29,7 +29,12 @@ pub struct Peer {
 }
 
 impl Peer {
-    pub fn new(addr: SocketAddr, remote_as: u32, local: LocalConfig, rib: Arc<RwLock<Rib>>) -> Self {
+    pub fn new(
+        addr: SocketAddr,
+        remote_as: u32,
+        local: LocalConfig,
+        rib: Arc<RwLock<Rib>>,
+    ) -> Self {
         let timers = BgpTimers::new(local.hold_time);
         Self {
             addr,

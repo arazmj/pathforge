@@ -17,7 +17,11 @@ pub struct Server {
 
 impl Server {
     pub fn new(bind_addr: SocketAddr, local: LocalConfig) -> Self {
-        Self { bind_addr, local, rib: Rib::shared() }
+        Self {
+            bind_addr,
+            local,
+            rib: Rib::shared(),
+        }
     }
 
     pub fn rib(&self) -> Arc<RwLock<Rib>> {
