@@ -1,4 +1,5 @@
 mod fsm;
+mod attr;
 mod message;
 mod peer;
 mod server;

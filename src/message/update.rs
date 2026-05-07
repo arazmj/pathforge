@@ -2,6 +2,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use std::net::Ipv4Addr;
 
 use super::{Header, MessageError, MessageType, HEADER_LEN};
+use crate::attr::PathAttributes;
 
 /// A BGP NLRI prefix (network + prefix length).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,13 +45,19 @@ impl Prefix {
     }
 }
 
+impl std::fmt::Display for Prefix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.address, self.prefix_len)
+    }
+}
+
 /// BGP UPDATE message (RFC 4271 §4.3).
 ///
 /// Carries routing information: withdrawn routes, path attributes, and NLRI.
 #[derive(Debug, Clone)]
 pub struct UpdateMessage {
     pub withdrawn_routes: Vec<Prefix>,
-    pub path_attributes: Vec<u8>, // Raw bytes for now; parsed in later iterations
+    pub path_attributes: PathAttributes,
     pub nlri: Vec<Prefix>,
 }
 
@@ -58,7 +65,7 @@ impl UpdateMessage {
     pub fn new() -> Self {
         Self {
             withdrawn_routes: vec![],
-            path_attributes: vec![],
+            path_attributes: PathAttributes::default(),
             nlri: vec![],
         }
     }
@@ -80,13 +87,14 @@ impl UpdateMessage {
             withdrawn_routes.push(Prefix::parse(&mut withdrawn_buf)?);
         }
 
-        // Path attributes (raw)
+        // Path attributes
         let attr_len = body.get_u16() as usize;
         if body.remaining() < attr_len {
             return Err(MessageError::TooShort { expected: attr_len, got: body.remaining() });
         }
-        let mut path_attributes = vec![0u8; attr_len];
-        body.copy_to_slice(&mut path_attributes);
+        let attr_bytes = body.copy_to_bytes(attr_len);
+        let path_attributes = PathAttributes::parse(attr_bytes)
+            .map_err(|e| MessageError::Parse(e.to_string()))?;
 
         // NLRI (remaining bytes)
         let mut nlri = vec![];
@@ -103,20 +111,21 @@ impl UpdateMessage {
         for prefix in &self.withdrawn_routes {
             prefix.serialize(&mut withdrawn_buf);
         }
+        let attr_buf = self.path_attributes.serialize();
         let mut nlri_buf = BytesMut::new();
         for prefix in &self.nlri {
             prefix.serialize(&mut nlri_buf);
         }
 
-        let body_len = 2 + withdrawn_buf.len() + 2 + self.path_attributes.len() + nlri_buf.len();
+        let body_len = 2 + withdrawn_buf.len() + 2 + attr_buf.len() + nlri_buf.len();
         let hdr = Header::new(MessageType::Update, body_len);
 
         let mut out = BytesMut::with_capacity(HEADER_LEN + body_len);
         hdr.serialize(&mut out);
         out.put_u16(withdrawn_buf.len() as u16);
         out.put(withdrawn_buf);
-        out.put_u16(self.path_attributes.len() as u16);
-        out.put_slice(&self.path_attributes);
+        out.put_u16(attr_buf.len() as u16);
+        out.put(attr_buf);
         out.put(nlri_buf);
         out
     }
@@ -131,6 +140,7 @@ impl Default for UpdateMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::attr::{AsPathSegment, Origin};
 
     #[test]
     fn test_prefix_roundtrip() {
@@ -154,15 +164,31 @@ mod tests {
     }
 
     #[test]
-    fn test_update_with_nlri() {
+    fn test_update_with_attrs_and_nlri() {
         let mut msg = UpdateMessage::new();
+        msg.path_attributes.origin = Some(Origin::Igp);
+        msg.path_attributes.as_path = vec![AsPathSegment::AsSequence(vec![65000, 65001])];
+        msg.path_attributes.next_hop = Some(Ipv4Addr::new(10, 0, 0, 1));
+        msg.path_attributes.local_pref = Some(100);
         msg.nlri.push(Prefix::new(Ipv4Addr::new(10, 0, 0, 0), 8));
         msg.nlri.push(Prefix::new(Ipv4Addr::new(172, 16, 0, 0), 12));
         let serialized = msg.serialize();
         let body = serialized.freeze().slice(HEADER_LEN..);
         let parsed = UpdateMessage::parse(body).unwrap();
         assert_eq!(parsed.nlri.len(), 2);
-        assert_eq!(parsed.nlri[0].prefix_len, 8);
-        assert_eq!(parsed.nlri[1].prefix_len, 12);
+        assert_eq!(parsed.path_attributes.origin, Some(Origin::Igp));
+        assert_eq!(parsed.path_attributes.local_pref, Some(100));
+        assert_eq!(parsed.path_attributes.as_path_len(), 2);
+    }
+
+    #[test]
+    fn test_withdrawn_routes() {
+        let mut msg = UpdateMessage::new();
+        msg.withdrawn_routes.push(Prefix::new(Ipv4Addr::new(192, 168, 0, 0), 16));
+        let serialized = msg.serialize();
+        let body = serialized.freeze().slice(HEADER_LEN..);
+        let parsed = UpdateMessage::parse(body).unwrap();
+        assert_eq!(parsed.withdrawn_routes.len(), 1);
+        assert_eq!(parsed.withdrawn_routes[0].prefix_len, 16);
     }
 }

@@ -21,7 +21,9 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 | BGP FSM — full RFC 4271 §8 (all 6 states + transitions) | ✅ |
 | Hold timer & keepalive timer | ✅ |
 | BGP session event loop (async tokio task per peer) | ✅ |
-| Path attributes (AS_PATH, NEXT_HOP, MED, LOCAL_PREF…) | ⏳ Planned |
+| Path attributes: ORIGIN, AS_PATH (4-byte), NEXT_HOP, MED, LOCAL_PREF | ✅ |
+| Path attributes: ATOMIC_AGGREGATE, AGGREGATOR, COMMUNITIES (RFC 1997) | ✅ |
+| Path attributes: ORIGINATOR_ID, CLUSTER_LIST, unknown pass-through | ✅ |
 | Routing Information Base (RIB) | ⏳ Planned |
 | NOTIFICATION messages & error handling | ⏳ Planned |
 | TOML configuration | ⏳ Planned |
@@ -45,7 +47,7 @@ pathforge/
 │   ├── main.rs       # Entry point, CLI argument parsing
 │   ├── server.rs     # TCP listener, connection dispatch
 │   ├── peer.rs       # Peer state, connection handler
-│   ├── timer.rs      # Hold timer, keepalive timer, LocalConfig
+│   ├── attr.rs       # Path attributes: ORIGIN, AS_PATH, NEXT_HOP, MED, LOCAL_PREF, communities
 │   ├── message/      # BGP message types
 │   │   ├── mod.rs        # Header, BgpMessage, MessageType
 │   │   ├── open.rs       # OPEN message (RFC 4271 §4.2)
