@@ -18,7 +18,9 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 | BGP UPDATE message (NLRI + withdrawn routes) | ✅ |
 | NOTIFICATION message | ✅ |
 | BGP message header (19-byte, RFC 4271 §4.1) | ✅ |
-| BGP FSM (Idle → Connect → Active → OpenSent → OpenConfirm → Established) | ✅ Skeleton |
+| BGP FSM — full RFC 4271 §8 (all 6 states + transitions) | ✅ |
+| Hold timer & keepalive timer | ✅ |
+| BGP session event loop (async tokio task per peer) | ✅ |
 | Path attributes (AS_PATH, NEXT_HOP, MED, LOCAL_PREF…) | ⏳ Planned |
 | Routing Information Base (RIB) | ⏳ Planned |
 | NOTIFICATION messages & error handling | ⏳ Planned |
@@ -43,7 +45,7 @@ pathforge/
 │   ├── main.rs       # Entry point, CLI argument parsing
 │   ├── server.rs     # TCP listener, connection dispatch
 │   ├── peer.rs       # Peer state, connection handler
-│   ├── fsm.rs        # BGP Finite State Machine (RFC 4271 §8)
+│   ├── timer.rs      # Hold timer, keepalive timer, LocalConfig
 │   ├── message/      # BGP message types
 │   │   ├── mod.rs        # Header, BgpMessage, MessageType
 │   │   ├── open.rs       # OPEN message (RFC 4271 §4.2)
@@ -83,10 +85,10 @@ cargo build --release
 
 ```bash
 # Listen on default BGP port (requires privileges for port 179)
-sudo ./target/release/pathforge
+sudo ./target/release/pathforge --local-as 65001 --router-id 10.0.0.1
 
 # Listen on a custom port for testing
-./target/release/pathforge --listen 127.0.0.1:1790
+./target/release/pathforge --listen 127.0.0.1:1790 --local-as 65001 --router-id 10.0.0.1
 ```
 
 ---
