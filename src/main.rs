@@ -1,5 +1,6 @@
 mod fsm;
 mod attr;
+mod capabilities;
 mod config;
 mod message;
 mod metrics;

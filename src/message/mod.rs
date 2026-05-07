@@ -4,6 +4,7 @@ use thiserror::Error;
 pub mod open;
 pub mod keepalive;
 pub mod notification;
+pub mod route_refresh;
 pub mod update;
 
 /// BGP message type codes (RFC 4271 §4.1).

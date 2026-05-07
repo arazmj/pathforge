@@ -43,8 +43,13 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 | Python smoke test suite (`tests/smoke_test.py`) | ✅ |
 | Docker Compose environment (pathforge + FRRouting) | ✅ |
 | Makefile: `make up/down/logs/smoke/test` | ✅ |
+| GitHub Actions CI (unit tests + smoke tests + binary artifact) | ✅ |
+| E2E test script (`tests/e2e.sh`) | ✅ |
+| Capability negotiation (RFC 5492): Multi-Protocol, Route-Refresh, 4-byte ASN, Graceful Restart | ✅ |
+| ROUTE-REFRESH message (RFC 2918) | ✅ |
+| 4-byte AS number capability (RFC 6793) | ✅ |
+| Graceful Restart capability advertisement (RFC 4724) | ✅ |
 | gRPC / REST API | ⏳ Planned |
-| End-to-end tests with FRRouting | ⏳ Planned |
 
 ---
 
