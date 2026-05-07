@@ -7,6 +7,7 @@ use anyhow::Result;
 use tracing::{info, warn};
 
 use crate::fsm::BgpState;
+use crate::metrics::Metrics;
 use crate::rib::Rib;
 
 /// Peer summary info for show commands.
@@ -40,18 +41,22 @@ impl MgmtState {
 ///   show bgp rib
 ///   show bgp neighbors [<ip>]
 ///   show bgp rib prefix <prefix>
+///   show bgp metrics
+///   metrics (Prometheus format)
 pub struct MgmtServer {
     socket_path: String,
     state: Arc<RwLock<MgmtState>>,
     rib: Arc<RwLock<Rib>>,
+    metrics: Arc<Metrics>,
 }
 
 impl MgmtServer {
-    pub fn new(socket_path: &str, state: Arc<RwLock<MgmtState>>, rib: Arc<RwLock<Rib>>) -> Self {
+    pub fn new(socket_path: &str, state: Arc<RwLock<MgmtState>>, rib: Arc<RwLock<Rib>>, metrics: Arc<Metrics>) -> Self {
         Self {
             socket_path: socket_path.to_string(),
             state,
             rib,
+            metrics,
         }
     }
 
@@ -67,8 +72,9 @@ impl MgmtServer {
                 Ok((stream, _)) => {
                     let state = self.state.clone();
                     let rib = self.rib.clone();
+                    let metrics = self.metrics.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = handle_mgmt_conn(stream, state, rib).await {
+                        if let Err(e) = handle_mgmt_conn(stream, state, rib, metrics).await {
                             warn!(error = %e, "Management connection error");
                         }
                     });
@@ -83,6 +89,7 @@ async fn handle_mgmt_conn(
     stream: UnixStream,
     state: Arc<RwLock<MgmtState>>,
     rib: Arc<RwLock<Rib>>,
+    metrics: Arc<Metrics>,
 ) -> Result<()> {
     let (read, mut write) = stream.into_split();
     let mut lines = BufReader::new(read).lines();
@@ -90,14 +97,14 @@ async fn handle_mgmt_conn(
     write.write_all(b"PathForge BGP Management\n> ").await?;
 
     while let Ok(Some(line)) = lines.next_line().await {
-        let response = process_command(line.trim(), &state, &rib);
+        let response = process_command(line.trim(), &state, &rib, &metrics);
         write.write_all(response.as_bytes()).await?;
         write.write_all(b"\n> ").await?;
     }
     Ok(())
 }
 
-fn process_command(cmd: &str, state: &Arc<RwLock<MgmtState>>, rib: &Arc<RwLock<Rib>>) -> String {
+fn process_command(cmd: &str, state: &Arc<RwLock<MgmtState>>, rib: &Arc<RwLock<Rib>>, metrics: &Arc<Metrics>) -> String {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     match parts.as_slice() {
         ["show", "bgp", "summary"] => cmd_bgp_summary(state, rib),
@@ -105,6 +112,8 @@ fn process_command(cmd: &str, state: &Arc<RwLock<MgmtState>>, rib: &Arc<RwLock<R
         ["show", "bgp", "rib", "prefix", prefix] => cmd_bgp_rib_prefix(rib, prefix),
         ["show", "bgp", "neighbors"] => cmd_bgp_neighbors(state, None),
         ["show", "bgp", "neighbors", ip] => cmd_bgp_neighbors(state, Some(ip)),
+        ["show", "bgp", "metrics"] => metrics.text_summary(),
+        ["metrics"] => metrics.prometheus_text(),
         ["help"] | [] => cmd_help(),
         ["quit"] | ["exit"] => "Bye!\n".to_string(),
         _ => format!("Unknown command: '{}'\nType 'help' for available commands.\n", cmd),
@@ -256,6 +265,8 @@ fn cmd_help() -> String {
      show bgp rib prefix X.X.X.X/N — Detail for a specific prefix\n\
      show bgp neighbors            — All neighbor detail\n\
      show bgp neighbors <ip>       — Specific neighbor detail\n\
+     show bgp metrics              — Human-readable counters\n\
+     metrics                       — Prometheus exposition format\n\
      help                          — Show this help\n\
      quit / exit                   — Close connection\n"
         .to_string()
@@ -303,7 +314,8 @@ mod tests {
     fn test_unknown_command() {
         let state = empty_state();
         let rib = empty_rib();
-        let out = process_command("foo bar", &state, &rib);
+        let metrics = Metrics::shared();
+        let out = process_command("foo bar", &state, &rib, &metrics);
         assert!(out.contains("Unknown command"));
     }
 

@@ -36,9 +36,12 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 | IPv6 unicast: MP_REACH_NLRI / MP_UNREACH_NLRI | ✅ |
 | Management CLI via Unix socket | ✅ |
 | Commands: show bgp summary/rib/neighbors, show bgp rib prefix | ✅ |
+| Route Reflector (RFC 4456): client/non-client, loop detection | ✅ |
+| ORIGINATOR_ID + CLUSTER_LIST attribute handling (RFC 4456) | ✅ |
+| Prometheus metrics endpoint (sessions, messages, routes, errors) | ✅ |
+| `show bgp metrics` and `metrics` management commands | ✅ |
+| Python smoke test suite (`tests/smoke_test.py`) | ✅ |
 | gRPC / REST API | ⏳ Planned |
-| Route Reflector (RFC 4456) | ⏳ Planned |
-| Prometheus metrics | ⏳ Planned |
 | Docker Compose test environment | ⏳ Planned |
 | End-to-end tests with FRRouting | ⏳ Planned |
 

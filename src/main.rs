@@ -2,11 +2,13 @@ mod fsm;
 mod attr;
 mod config;
 mod message;
+mod metrics;
 mod mgmt;
 mod mp;
 mod peer;
 mod policy;
 mod rib;
+mod rr;
 mod server;
 mod timer;
 
@@ -16,6 +18,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use tracing_subscriber::EnvFilter;
 
 use mgmt::{MgmtServer, MgmtState};
+use metrics::Metrics;
 use server::Server;
 use timer::LocalConfig;
 
@@ -74,9 +77,10 @@ async fn main() -> Result<()> {
     let server = Server::new(listen, local);
     let rib = server.rib();
     let mgmt_state = MgmtState::shared();
+    let metrics = Metrics::shared();
 
     // Start management server concurrently
-    let mgmt = MgmtServer::new(&cli.mgmt_socket, mgmt_state, rib);
+    let mgmt = MgmtServer::new(&cli.mgmt_socket, mgmt_state, rib, metrics);
     tokio::spawn(async move {
         if let Err(e) = mgmt.run().await {
             tracing::error!(error = %e, "Management server error");
