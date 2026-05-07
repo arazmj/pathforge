@@ -32,7 +32,8 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 | BGP Communities (RFC 1997): parsing, well-known, display | ✅ |
 | Route filtering: prefix lists (ge/le range), community lists | ✅ |
 | Import/export policy engine | ✅ |
-| Multi-protocol / IPv6 (RFC 4760) | ⏳ Planned |
+| Multi-protocol extensions: AFI/SAFI (RFC 4760) | ✅ |
+| IPv6 unicast: MP_REACH_NLRI / MP_UNREACH_NLRI | ✅ |
 | CLI management interface | ⏳ Planned |
 | gRPC / REST API | ⏳ Planned |
 | Route Reflector (RFC 4456) | ⏳ Planned |
