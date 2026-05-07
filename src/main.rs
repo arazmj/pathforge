@@ -3,6 +3,7 @@ mod attr;
 mod config;
 mod message;
 mod peer;
+mod policy;
 mod rib;
 mod server;
 mod timer;

@@ -29,8 +29,9 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 | Route withdrawal propagation to RIB | ✅ |
 | NOTIFICATION messages & error handling | ✅ |
 | TOML configuration file (router, neighbors, policy) | ✅ |
-| BGP Communities (RFC 1997) | ⏳ Planned |
-| Route filtering & policy | ⏳ Planned |
+| BGP Communities (RFC 1997): parsing, well-known, display | ✅ |
+| Route filtering: prefix lists (ge/le range), community lists | ✅ |
+| Import/export policy engine | ✅ |
 | Multi-protocol / IPv6 (RFC 4760) | ⏳ Planned |
 | CLI management interface | ⏳ Planned |
 | gRPC / REST API | ⏳ Planned |
