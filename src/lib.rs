@@ -1,6 +1,7 @@
 pub mod attr;
 pub mod capabilities;
 pub mod dampening;
+pub mod rpki;
 pub mod config;
 pub mod fsm;
 pub mod message;

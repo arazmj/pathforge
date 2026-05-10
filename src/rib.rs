@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use crate::attr::PathAttributes;
 use crate::dampening::{DampeningConfig, DampeningTable};
 use crate::message::update::Prefix;
+use crate::rpki::{RovState, RpkiValidator};
 
 /// A route entry stored in the RIB.
 #[derive(Debug, Clone)]
@@ -22,6 +23,8 @@ pub struct Route {
     pub received_at: std::time::Instant,
     /// RFC 4724: route is stale pending graceful restart.
     pub stale: bool,
+    /// RFC 6811: RPKI/ROA validation state.
+    pub rov_state: RovState,
 }
 
 impl Route {
@@ -33,6 +36,7 @@ impl Route {
             peer_as,
             received_at: std::time::Instant::now(),
             stale: false,
+            rov_state: RovState::NotFound,
         }
     }
 }
@@ -82,6 +86,8 @@ pub struct Rib {
     adj_rib_out: HashMap<SocketAddr, AdjRibOut>,
     /// RFC 2439 route dampening engine.
     pub dampening: DampeningTable,
+    /// RFC 6811 RPKI/ROA validator.
+    pub rpki: RpkiValidator,
 }
 
 impl Default for Rib {
@@ -91,6 +97,7 @@ impl Default for Rib {
             loc_rib: HashMap::new(),
             adj_rib_out: HashMap::new(),
             dampening: DampeningTable::new(DampeningConfig::default()),
+            rpki: RpkiValidator::default(),
         }
     }
 }
@@ -122,16 +129,24 @@ impl Rib {
 
         let adj_in = self.adj_rib_in.entry(peer_addr).or_default();
 
-        // Add/update new routes (skip suppressed ones)
+        // Add/update new routes (skip suppressed or RPKI-strict-invalid ones)
         let mut affected_nlri: Vec<PrefixKey> = Vec::new();
         for prefix in nlri {
             let key = PrefixKey::from(prefix);
             let suppressed = self.dampening.check_advertisement(peer_addr, &key);
-            if !suppressed {
-                let route = Route::new(prefix.clone(), attrs.clone(), peer_addr, peer_as);
-                adj_in.insert(key.clone(), route);
-                affected_nlri.push(key);
+
+            // RPKI validation
+            let rov = self
+                .rpki
+                .validate(prefix.address, prefix.prefix_len, peer_as);
+            if suppressed || self.rpki.should_reject(rov) {
+                continue;
             }
+
+            let mut route = Route::new(prefix.clone(), attrs.clone(), peer_addr, peer_as);
+            route.rov_state = rov;
+            adj_in.insert(key.clone(), route);
+            affected_nlri.push(key);
         }
 
         // Remove withdrawn routes
