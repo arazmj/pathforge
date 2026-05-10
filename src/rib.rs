@@ -3,6 +3,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::{Arc, RwLock};
 
 use crate::attr::PathAttributes;
+use crate::dampening::{DampeningConfig, DampeningTable};
 use crate::message::update::Prefix;
 
 /// A route entry stored in the RIB.
@@ -71,7 +72,6 @@ pub type AdjRibOut = HashMap<PrefixKey, Route>;
 /// The full BGP Routing Information Base.
 ///
 /// Thread-safe via Arc<RwLock<...>> so it can be shared across peer tasks.
-#[derive(Default)]
 pub struct Rib {
     /// Adj-RIB-In per peer.
     adj_rib_in: HashMap<SocketAddr, AdjRibIn>,
@@ -80,6 +80,19 @@ pub struct Rib {
     /// Adj-RIB-Out per peer (routes to advertise).
     #[allow(dead_code)]
     adj_rib_out: HashMap<SocketAddr, AdjRibOut>,
+    /// RFC 2439 route dampening engine.
+    pub dampening: DampeningTable,
+}
+
+impl Default for Rib {
+    fn default() -> Self {
+        Self {
+            adj_rib_in: HashMap::new(),
+            loc_rib: HashMap::new(),
+            adj_rib_out: HashMap::new(),
+            dampening: DampeningTable::new(DampeningConfig::default()),
+        }
+    }
 }
 
 impl Rib {
@@ -101,13 +114,24 @@ impl Rib {
         attrs: &PathAttributes,
         withdrawn: &[Prefix],
     ) {
+        // Record withdrawals in the dampening table
+        for prefix in withdrawn {
+            let key = PrefixKey::from(prefix);
+            self.dampening.record_withdrawal(peer_addr, &key);
+        }
+
         let adj_in = self.adj_rib_in.entry(peer_addr).or_default();
 
-        // Add/update new routes
+        // Add/update new routes (skip suppressed ones)
+        let mut affected_nlri: Vec<PrefixKey> = Vec::new();
         for prefix in nlri {
             let key = PrefixKey::from(prefix);
-            let route = Route::new(prefix.clone(), attrs.clone(), peer_addr, peer_as);
-            adj_in.insert(key, route);
+            let suppressed = self.dampening.check_advertisement(peer_addr, &key);
+            if !suppressed {
+                let route = Route::new(prefix.clone(), attrs.clone(), peer_addr, peer_as);
+                adj_in.insert(key.clone(), route);
+                affected_nlri.push(key);
+            }
         }
 
         // Remove withdrawn routes
@@ -116,10 +140,9 @@ impl Rib {
         }
 
         // Re-run decision process for affected prefixes
-        let affected: Vec<PrefixKey> = nlri
-            .iter()
-            .chain(withdrawn.iter())
-            .map(PrefixKey::from)
+        let affected: Vec<PrefixKey> = affected_nlri
+            .into_iter()
+            .chain(withdrawn.iter().map(PrefixKey::from))
             .collect();
         for key in affected {
             self.run_decision_process(&key);
@@ -187,6 +210,7 @@ impl Rib {
         for key in &removed_keys {
             self.run_decision_process(key);
         }
+        self.dampening.remove_peer(peer_addr);
         removed_keys
     }
 
