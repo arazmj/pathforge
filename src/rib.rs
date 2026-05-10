@@ -292,6 +292,23 @@ impl Rib {
         self.loc_rib.len()
     }
 
+    /// Longest Prefix Match: find the most specific Loc-RIB entry covering `addr`.
+    ///
+    /// Returns `None` if no route covers the address.
+    pub fn longest_match(&self, addr: Ipv4Addr) -> Option<(&PrefixKey, &Route)> {
+        let addr_bits = u32::from(addr);
+        self.loc_rib
+            .iter()
+            .filter(|(key, _)| {
+                if key.prefix_len == 0 {
+                    return true; // default route covers everything
+                }
+                let shift = 32 - key.prefix_len as u32;
+                (addr_bits >> shift) == (u32::from(key.address) >> shift)
+            })
+            .max_by_key(|(key, _)| key.prefix_len)
+    }
+
     /// Summary: (peer_count, total_adj_rib_in_routes, loc_rib_routes)
     pub fn summary(&self) -> (usize, usize, usize) {
         let total_adj: usize = self.adj_rib_in.values().map(|r| r.len()).sum();
@@ -406,6 +423,51 @@ mod tests {
         assert_eq!(peers, 1);
         assert_eq!(adj, 2);
         assert_eq!(loc, 2);
+    }
+
+    #[test]
+    fn test_longest_prefix_match_basic() {
+        let mut rib = Rib::new();
+        let attrs = PathAttributes::default();
+        // Add two overlapping prefixes
+        let p8 = Prefix::new(Ipv4Addr::new(10, 0, 0, 0), 8);
+        let p24 = Prefix::new(Ipv4Addr::new(10, 1, 2, 0), 24);
+        rib.process_update(peer(1), 65001, &[p8.clone(), p24.clone()], &attrs, &[]);
+
+        // 10.1.2.5 should match /24 (more specific)
+        let (key, _) = rib.longest_match(Ipv4Addr::new(10, 1, 2, 5)).unwrap();
+        assert_eq!(key.prefix_len, 24);
+
+        // 10.2.0.1 should match /8 (less specific)
+        let (key, _) = rib.longest_match(Ipv4Addr::new(10, 2, 0, 1)).unwrap();
+        assert_eq!(key.prefix_len, 8);
+
+        // 192.0.0.1 has no match
+        assert!(rib.longest_match(Ipv4Addr::new(192, 0, 0, 1)).is_none());
+    }
+
+    #[test]
+    fn test_longest_prefix_match_default_route() {
+        let mut rib = Rib::new();
+        let attrs = PathAttributes::default();
+        // Default route 0.0.0.0/0
+        let default = Prefix::new(Ipv4Addr::new(0, 0, 0, 0), 0);
+        let specific = Prefix::new(Ipv4Addr::new(10, 0, 0, 0), 8);
+        rib.process_update(peer(1), 65001, &[default.clone(), specific.clone()], &attrs, &[]);
+
+        // 10.5.0.1 should prefer the /8
+        let (key, _) = rib.longest_match(Ipv4Addr::new(10, 5, 0, 1)).unwrap();
+        assert_eq!(key.prefix_len, 8);
+
+        // 1.2.3.4 should fall back to the default route
+        let (key, _) = rib.longest_match(Ipv4Addr::new(1, 2, 3, 4)).unwrap();
+        assert_eq!(key.prefix_len, 0);
+    }
+
+    #[test]
+    fn test_longest_prefix_match_empty_rib() {
+        let rib = Rib::new();
+        assert!(rib.longest_match(Ipv4Addr::new(10, 0, 0, 1)).is_none());
     }
 
     #[test]
