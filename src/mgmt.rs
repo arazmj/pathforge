@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
-use tracing::{info, warn};
+use tracing::{info, instrument, warn};
 
 use crate::fsm::BgpState;
 use crate::metrics::Metrics;
@@ -90,6 +90,7 @@ impl MgmtServer {
     }
 }
 
+#[instrument(name = "mgmt_conn", skip_all)]
 async fn handle_mgmt_conn(
     stream: UnixStream,
     state: Arc<RwLock<MgmtState>>,

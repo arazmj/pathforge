@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::{sleep, Duration};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::capabilities::Capability;
 use crate::fsm::{BgpEvent, BgpState};
@@ -76,6 +76,7 @@ impl Peer {
     }
 
     /// Run the BGP session for an incoming TCP connection.
+    #[instrument(name = "bgp_session", skip_all, fields(peer = %peer_addr))]
     pub async fn handle_incoming(
         stream: TcpStream,
         peer_addr: SocketAddr,
@@ -83,7 +84,7 @@ impl Peer {
         rib: Arc<RwLock<Rib>>,
         metrics: Arc<Metrics>,
     ) -> Result<()> {
-        info!(peer = %peer_addr, "Incoming TCP connection");
+        info!("Incoming TCP connection");
         metrics.inc(&metrics.sessions_active);
         let mut peer = Peer::new(peer_addr, 0, local.clone(), rib, metrics);
         peer.transition(BgpEvent::ManualStart);
@@ -92,6 +93,7 @@ impl Peer {
     }
 
     /// Run the BGP session event loop on an established TCP stream.
+    #[instrument(name = "session_loop", skip_all, fields(peer = %self.addr))]
     async fn run_session(&mut self, mut stream: TcpStream) -> Result<()> {
         self.metrics.inc(&self.metrics.messages_tx_open);
 
@@ -177,6 +179,7 @@ impl Peer {
         }
     }
 
+    #[instrument(name = "bgp_msg", skip_all, fields(peer = %self.addr, msg_type = ?msg.header.msg_type))]
     async fn handle_message(&mut self, msg: BgpMessage, stream: &mut TcpStream) -> Result<()> {
         match msg.header.msg_type {
             MessageType::Open => {
