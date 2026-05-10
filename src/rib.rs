@@ -19,6 +19,8 @@ pub struct Route {
     pub peer_as: u32,
     /// When this route was received (monotonic).
     pub received_at: std::time::Instant,
+    /// RFC 4724: route is stale pending graceful restart.
+    pub stale: bool,
 }
 
 impl Route {
@@ -29,6 +31,7 @@ impl Route {
             peer_addr,
             peer_as,
             received_at: std::time::Instant::now(),
+            stale: false,
         }
     }
 }
@@ -187,6 +190,52 @@ impl Rib {
         removed_keys
     }
 
+    /// RFC 4724: mark all routes from a peer as stale (peer disconnected, may restart).
+    pub fn mark_peer_stale(&mut self, peer_addr: SocketAddr) {
+        if let Some(rib) = self.adj_rib_in.get_mut(&peer_addr) {
+            for route in rib.values_mut() {
+                route.stale = true;
+            }
+        }
+    }
+
+    /// RFC 4724: remove all remaining stale routes for a peer (restart timer expired).
+    pub fn remove_stale_for_peer(&mut self, peer_addr: SocketAddr) -> Vec<PrefixKey> {
+        let stale_keys: Vec<PrefixKey> = self
+            .adj_rib_in
+            .get(&peer_addr)
+            .map(|rib| {
+                rib.iter()
+                    .filter(|(_, r)| r.stale)
+                    .map(|(k, _)| k.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if let Some(rib) = self.adj_rib_in.get_mut(&peer_addr) {
+            for key in &stale_keys {
+                rib.remove(key);
+            }
+            if rib.is_empty() {
+                self.adj_rib_in.remove(&peer_addr);
+            }
+        }
+
+        for key in &stale_keys {
+            self.run_decision_process(key);
+        }
+        stale_keys
+    }
+
+    /// Return the count of stale routes in Adj-RIB-In across all peers.
+    pub fn stale_route_count(&self) -> usize {
+        self.adj_rib_in
+            .values()
+            .flat_map(|rib| rib.values())
+            .filter(|r| r.stale)
+            .count()
+    }
+
     /// Get the Loc-RIB (best routes).
     pub fn loc_rib(&self) -> &LocRib {
         &self.loc_rib
@@ -318,5 +367,57 @@ mod tests {
         assert_eq!(peers, 1);
         assert_eq!(adj, 2);
         assert_eq!(loc, 2);
+    }
+
+    #[test]
+    fn test_graceful_restart_mark_stale() {
+        let mut rib = Rib::new();
+        let p = Prefix::new(Ipv4Addr::new(10, 0, 0, 0), 8);
+        let attrs = PathAttributes::default();
+        rib.process_update(peer(1), 65001, &[p.clone()], &attrs, &[]);
+
+        // Before marking: route is not stale
+        assert!(!rib.adj_rib_in(&peer(1)).unwrap()[&PrefixKey::from(&p)].stale);
+
+        rib.mark_peer_stale(peer(1));
+        assert!(rib.adj_rib_in(&peer(1)).unwrap()[&PrefixKey::from(&p)].stale);
+        // Loc-RIB still has the route (stale routes are still forwarded)
+        assert_eq!(rib.prefix_count(), 1);
+        assert_eq!(rib.stale_route_count(), 1);
+    }
+
+    #[test]
+    fn test_graceful_restart_refresh_clears_stale() {
+        let mut rib = Rib::new();
+        let p = Prefix::new(Ipv4Addr::new(10, 0, 0, 0), 8);
+        let attrs = PathAttributes::default();
+        rib.process_update(peer(1), 65001, &[p.clone()], &attrs, &[]);
+        rib.mark_peer_stale(peer(1));
+
+        // Peer reconnects and re-advertises the route
+        rib.process_update(peer(1), 65001, &[p.clone()], &attrs, &[]);
+        // process_update replaces with a fresh (non-stale) Route
+        assert!(!rib.adj_rib_in(&peer(1)).unwrap()[&PrefixKey::from(&p)].stale);
+        assert_eq!(rib.stale_route_count(), 0);
+    }
+
+    #[test]
+    fn test_graceful_restart_remove_stale() {
+        let mut rib = Rib::new();
+        let p1 = Prefix::new(Ipv4Addr::new(10, 0, 0, 0), 8);
+        let p2 = Prefix::new(Ipv4Addr::new(172, 16, 0, 0), 16);
+        let attrs = PathAttributes::default();
+        rib.process_update(peer(1), 65001, &[p1.clone(), p2.clone()], &attrs, &[]);
+        rib.mark_peer_stale(peer(1));
+
+        // p1 is refreshed (no longer stale), p2 is not
+        rib.process_update(peer(1), 65001, &[p1.clone()], &attrs, &[]);
+        assert_eq!(rib.stale_route_count(), 1);
+
+        // End-of-RIB / timer expiry: remove remaining stale routes
+        let removed = rib.remove_stale_for_peer(peer(1));
+        assert_eq!(removed.len(), 1);
+        assert_eq!(removed[0], PrefixKey::from(&p2));
+        assert_eq!(rib.prefix_count(), 1); // only p1 remains
     }
 }

@@ -153,6 +153,21 @@ const FLAG_TRANSITIVE: u8 = 0x40;
 const FLAG_EXTENDED_LEN: u8 = 0x10;
 
 impl PathAttributes {
+    /// True when no attributes are set (RFC 4724 End-of-RIB detection).
+    pub fn is_empty(&self) -> bool {
+        self.origin.is_none()
+            && self.as_path.is_empty()
+            && self.next_hop.is_none()
+            && self.multi_exit_disc.is_none()
+            && self.local_pref.is_none()
+            && !self.atomic_aggregate
+            && self.aggregator.is_none()
+            && self.communities.is_empty()
+            && self.originator_id.is_none()
+            && self.cluster_list.is_empty()
+            && self.unknown.is_empty()
+    }
+
     /// Parse all path attributes from a raw byte buffer.
     pub fn parse(mut buf: impl Buf) -> Result<Self, AttrError> {
         let mut attrs = PathAttributes::default();

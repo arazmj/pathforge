@@ -104,6 +104,10 @@ impl Peer {
             },
             Capability::RouteRefresh,
             Capability::MultiProtocol { afi: 1, safi: 1 }, // IPv4 Unicast
+            Capability::GracefulRestart {
+                restart_time: 120,
+                flags: 0,
+            },
         ];
         let open = OpenMessage::new_with_capabilities(
             self.local.local_as.min(u16::MAX as u32) as u16,
@@ -125,12 +129,9 @@ impl Peer {
                 let _ = stream.write_all(&notif.serialize()).await;
                 self.metrics.inc(&self.metrics.messages_tx_notification);
                 self.transition(BgpEvent::HoldTimerExpired);
-                // Clean up RIB
-                if let Ok(mut rib) = self.rib.write() {
-                    rib.remove_peer(self.addr);
-                }
                 self.metrics.inc(&self.metrics.sessions_failed);
                 self.metrics.set(&self.metrics.sessions_active, 0);
+                self.handle_disconnect().await;
                 return Ok(());
             }
 
@@ -151,12 +152,7 @@ impl Peer {
                             info!(peer = %self.addr, "Connection closed by peer");
                             self.transition(BgpEvent::TcpConnectionFail);
                             self.metrics.set(&self.metrics.sessions_active, 0);
-                            if let Ok(mut rib) = self.rib.write() {
-                                let removed = rib.remove_peer(self.addr);
-                                if !removed.is_empty() {
-                                    info!(peer = %self.addr, "Withdrew {} routes from RIB", removed.len());
-                                }
-                            }
+                            self.handle_disconnect().await;
                             return Ok(());
                         }
                         Ok(n) => buf.extend_from_slice(&tmp[..n]),
@@ -175,6 +171,59 @@ impl Peer {
             // Process all complete messages in the buffer
             while let Some(msg) = BgpMessage::parse(&mut buf)? {
                 self.handle_message(msg, &mut stream).await?;
+            }
+        }
+    }
+
+    /// Handle peer disconnect: use Graceful Restart (RFC 4724) if negotiated,
+    /// otherwise remove routes immediately.
+    async fn handle_disconnect(&mut self) {
+        let peer_supports_gr = self
+            .peer_capabilities
+            .iter()
+            .any(|c| matches!(c, Capability::GracefulRestart { .. }));
+
+        let restart_time = self
+            .peer_capabilities
+            .iter()
+            .find_map(|c| {
+                if let Capability::GracefulRestart { restart_time, .. } = c {
+                    Some(*restart_time)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(120);
+
+        if peer_supports_gr && self.state == BgpState::Established {
+            info!(
+                peer = %self.addr,
+                "Peer supports Graceful Restart — marking routes stale ({}s timer)",
+                restart_time
+            );
+            if let Ok(mut rib) = self.rib.write() {
+                rib.mark_peer_stale(self.addr);
+            }
+            // Spawn background task to purge stale routes after restart_time
+            let rib = self.rib.clone();
+            let addr = self.addr;
+            tokio::spawn(async move {
+                sleep(Duration::from_secs(restart_time as u64)).await;
+                if let Ok(mut rib) = rib.write() {
+                    let removed = rib.remove_stale_for_peer(addr);
+                    if !removed.is_empty() {
+                        tracing::info!(
+                            peer = %addr,
+                            "Graceful restart timer expired: purged {} stale routes",
+                            removed.len()
+                        );
+                    }
+                }
+            });
+        } else if let Ok(mut rib) = self.rib.write() {
+            let removed = rib.remove_peer(self.addr);
+            if !removed.is_empty() {
+                info!(peer = %self.addr, "Withdrew {} routes from RIB", removed.len());
             }
         }
     }
@@ -223,6 +272,12 @@ impl Peer {
 
                 let nlri_count = update.nlri.len();
                 let withdrawn_count = update.withdrawn_routes.len();
+
+                // RFC 4724 §4.1: End-of-RIB marker — empty withdrawn, empty NLRI, empty attrs
+                let is_end_of_rib = nlri_count == 0
+                    && withdrawn_count == 0
+                    && update.path_attributes.is_empty();
+
                 self.metrics
                     .routes_received
                     .fetch_add(nlri_count as u64, std::sync::atomic::Ordering::Relaxed);
@@ -238,15 +293,32 @@ impl Peer {
                         &update.path_attributes,
                         &update.withdrawn_routes,
                     );
+
+                    if is_end_of_rib {
+                        // Remove any stale routes not refreshed by the restarting peer
+                        let stale_removed = rib.remove_stale_for_peer(self.addr);
+                        if !stale_removed.is_empty() {
+                            info!(
+                                peer = %self.addr,
+                                "End-of-RIB: removed {} stale routes",
+                                stale_removed.len()
+                            );
+                        } else {
+                            debug!(peer = %self.addr, "End-of-RIB received");
+                        }
+                    }
+
                     let (_, _, loc_count) = rib.summary();
                     self.metrics
                         .routes_loc_rib
                         .store(loc_count as u64, std::sync::atomic::Ordering::Relaxed);
-                    info!(
-                        peer = %self.addr,
-                        "+{} -{} routes | Loc-RIB: {} prefixes",
-                        nlri_count, withdrawn_count, loc_count
-                    );
+                    if nlri_count > 0 || withdrawn_count > 0 {
+                        info!(
+                            peer = %self.addr,
+                            "+{} -{} routes | Loc-RIB: {} prefixes",
+                            nlri_count, withdrawn_count, loc_count
+                        );
+                    }
                 }
             }
             MessageType::Notification => {
@@ -256,6 +328,7 @@ impl Peer {
                 self.transition(BgpEvent::NotifMsg);
                 self.metrics.inc(&self.metrics.sessions_failed);
                 self.metrics.set(&self.metrics.sessions_active, 0);
+                // NOTIFICATION means the peer is closing — remove routes immediately
                 if let Ok(mut rib) = self.rib.write() {
                     rib.remove_peer(self.addr);
                 }
