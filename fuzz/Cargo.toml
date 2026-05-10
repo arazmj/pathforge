@@ -1,0 +1,47 @@
+[package]
+name = "pathforge-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+bytes = "1"
+
+[dependencies.pathforge]
+path = ".."
+
+# BGP framing layer — header + message body extraction
+[[bin]]
+name = "fuzz_bgp_message"
+path = "fuzz_targets/fuzz_bgp_message.rs"
+test = false
+doc = false
+bench = false
+
+# Path attribute parser (ORIGIN, AS_PATH, NEXT_HOP, MED, communities…)
+[[bin]]
+name = "fuzz_path_attrs"
+path = "fuzz_targets/fuzz_path_attrs.rs"
+test = false
+doc = false
+bench = false
+
+# OPEN message parser
+[[bin]]
+name = "fuzz_open_message"
+path = "fuzz_targets/fuzz_open_message.rs"
+test = false
+doc = false
+bench = false
+
+# UPDATE message parser (most complex: withdrawn routes + attrs + NLRI)
+[[bin]]
+name = "fuzz_update_message"
+path = "fuzz_targets/fuzz_update_message.rs"
+test = false
+doc = false
+bench = false

@@ -121,13 +121,6 @@ impl Config {
         Ok(config)
     }
 
-    /// Parse configuration from a TOML string.
-    #[allow(dead_code)]
-    pub fn from_str(s: &str) -> Result<Self> {
-        let config: Config = toml::from_str(s)?;
-        config.validate()?;
-        Ok(config)
-    }
 
     fn validate(&self) -> Result<()> {
         // AS number: must be non-zero (0 is reserved, RFC 7607)
@@ -186,9 +179,20 @@ impl Config {
     }
 }
 
+impl std::str::FromStr for Config {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let config: Config = toml::from_str(s)?;
+        config.validate()?;
+        Ok(config)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     const SAMPLE_CONFIG: &str = r#"
 [router]

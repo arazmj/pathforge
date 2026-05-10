@@ -1,27 +1,13 @@
-mod attr;
-mod capabilities;
-mod config;
-mod fsm;
-mod message;
-mod metrics;
-mod mgmt;
-mod mp;
-mod peer;
-mod policy;
-mod rib;
-mod rr;
-mod server;
-mod timer;
-
 use anyhow::Result;
 use clap::Parser;
 use std::net::{Ipv4Addr, SocketAddr};
 use tracing_subscriber::EnvFilter;
 
-use metrics::Metrics;
-use mgmt::{MgmtServer, MgmtState};
-use server::Server;
-use timer::LocalConfig;
+use pathforge::config;
+use pathforge::metrics::Metrics;
+use pathforge::mgmt::{MgmtServer, MgmtState};
+use pathforge::server::Server;
+use pathforge::timer::LocalConfig;
 
 #[derive(Parser, Debug)]
 #[command(
