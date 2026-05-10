@@ -61,7 +61,40 @@ jobs:
       - name: Run unit tests
         run: cargo test --verbose
 
-  # ── 3. Build & Smoke Test ────────────────────────────────────────────────────
+  # ── 3. Coverage ──────────────────────────────────────────────────────────────
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-coverage-
+
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --locked
+
+      - name: Generate coverage report
+        run: cargo tarpaulin --out Xml --output-dir coverage/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/cobertura.xml
+          fail_ci_if_error: false
+
+  # ── 5. Build & Smoke Test ────────────────────────────────────────────────────
   build:
     name: Release Build & Smoke Test
     runs-on: ubuntu-latest
@@ -95,7 +128,7 @@ jobs:
           path: target/release/pathforge
           retention-days: 7
 
-  # ── 4. Security Audit ────────────────────────────────────────────────────────
+  # ── 6. Security Audit ────────────────────────────────────────────────────────
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -111,7 +144,7 @@ jobs:
       - name: Run security audit
         run: cargo audit
 
-  # ── 5. Cross-platform Builds ─────────────────────────────────────────────────
+  # ── 7. Cross-platform Builds ─────────────────────────────────────────────────
   cross-build:
     name: Cross Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
