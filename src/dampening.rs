@@ -75,7 +75,7 @@ impl Default for DampeningConfig {
             penalty_per_flap: 1000.0,
             suppress_limit: 2000.0,
             reuse_limit: 750.0,
-            half_life_secs: 900.0, // 15 minutes
+            half_life_secs: 900.0,                        // 15 minutes
             max_suppress_time: Duration::from_secs(3600), // 60 minutes
         }
     }
@@ -271,8 +271,14 @@ mod tests {
         std::thread::sleep(Duration::from_millis(1100)); // ~1 half-life
         let penalty = table.current_penalty(peer(), &pfx(1));
         // After 1 half-life, penalty should be ~1000 (±10% for timing jitter)
-        assert!(penalty < 1100.0, "penalty={penalty} should be < 1100 after 1 half-life");
-        assert!(penalty > 800.0, "penalty={penalty} should be > 800 after 1 half-life");
+        assert!(
+            penalty < 1100.0,
+            "penalty={penalty} should be < 1100 after 1 half-life"
+        );
+        assert!(
+            penalty > 800.0,
+            "penalty={penalty} should be > 800 after 1 half-life"
+        );
     }
 
     #[test]

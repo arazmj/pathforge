@@ -248,7 +248,7 @@ mod tests {
         assert!(roa.covers(Ipv4Addr::new(10, 1, 0, 0), 16));
         assert!(roa.covers(Ipv4Addr::new(10, 1, 2, 0), 24));
         assert!(!roa.covers(Ipv4Addr::new(10, 1, 2, 0), 25)); // > max_length
-        assert!(!roa.covers(Ipv4Addr::new(11, 0, 0, 0), 8));  // different network
+        assert!(!roa.covers(Ipv4Addr::new(11, 0, 0, 0), 8)); // different network
     }
 
     #[test]

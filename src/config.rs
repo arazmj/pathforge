@@ -133,7 +133,6 @@ impl Config {
         Ok(config)
     }
 
-
     fn validate(&self) -> Result<()> {
         // AS number: must be non-zero (0 is reserved, RFC 7607)
         if self.router.local_as == 0 {
@@ -179,10 +178,7 @@ impl Config {
             // Per-neighbor hold_time follows the same rule as global
             if let Some(ht) = n.hold_time {
                 if ht != 0 && ht < 3 {
-                    anyhow::bail!(
-                        "neighbor {}: hold_time must be 0 or >= 3 seconds",
-                        n.addr
-                    );
+                    anyhow::bail!("neighbor {}: hold_time must be 0 or >= 3 seconds", n.addr);
                 }
             }
             // MD5 password: RFC 2385 limits passwords to 80 octets
@@ -306,7 +302,10 @@ local_as = 65000
 router_id = "0.0.0.0"
 "#;
         let err = Config::from_str(s).unwrap_err().to_string();
-        assert!(err.contains("0.0.0.0"), "expected 0.0.0.0 error, got: {err}");
+        assert!(
+            err.contains("0.0.0.0"),
+            "expected 0.0.0.0 error, got: {err}"
+        );
     }
 
     #[test]
@@ -345,7 +344,10 @@ addr = "10.0.0.1"
 remote_as = 65002
 "#;
         let err = Config::from_str(s).unwrap_err().to_string();
-        assert!(err.contains("duplicate"), "expected duplicate error, got: {err}");
+        assert!(
+            err.contains("duplicate"),
+            "expected duplicate error, got: {err}"
+        );
     }
 
     #[test]
@@ -391,10 +393,7 @@ remote_as = 65001
 md5_password = "secret"
 "#;
         let cfg = Config::from_str(s).unwrap();
-        assert_eq!(
-            cfg.neighbors[0].md5_password.as_deref(),
-            Some("secret")
-        );
+        assert_eq!(cfg.neighbors[0].md5_password.as_deref(), Some("secret"));
     }
 
     #[test]

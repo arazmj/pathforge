@@ -42,8 +42,7 @@ impl Server {
             let rib = self.rib.clone();
             let metrics = self.metrics.clone();
             tokio::spawn(async move {
-                if let Err(e) =
-                    Peer::handle_incoming(stream, peer_addr, local, rib, metrics).await
+                if let Err(e) = Peer::handle_incoming(stream, peer_addr, local, rib, metrics).await
                 {
                     tracing::error!(peer = %peer_addr, error = %e, "Peer session error");
                 }

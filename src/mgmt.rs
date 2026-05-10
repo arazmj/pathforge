@@ -565,14 +565,20 @@ mod tests {
     fn test_show_rib_aspath_not_found() {
         let rib = rib_with_routes();
         let out = cmd_bgp_rib_aspath(&rib, "99999");
-        assert!(out.contains("No routes"), "expected no-routes message, got: {out}");
+        assert!(
+            out.contains("No routes"),
+            "expected no-routes message, got: {out}"
+        );
     }
 
     #[test]
     fn test_show_rib_aspath_invalid() {
         let rib = empty_rib();
         let out = cmd_bgp_rib_aspath(&rib, "notanasn");
-        assert!(out.contains("Invalid"), "expected invalid error, got: {out}");
+        assert!(
+            out.contains("Invalid"),
+            "expected invalid error, got: {out}"
+        );
     }
 
     #[test]
@@ -593,7 +599,10 @@ mod tests {
     fn test_show_rib_nexthop_invalid() {
         let rib = empty_rib();
         let out = cmd_bgp_rib_nexthop(&rib, "not-an-ip");
-        assert!(out.contains("Invalid"), "expected invalid error, got: {out}");
+        assert!(
+            out.contains("Invalid"),
+            "expected invalid error, got: {out}"
+        );
     }
 
     #[test]

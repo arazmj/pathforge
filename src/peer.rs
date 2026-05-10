@@ -234,10 +234,12 @@ impl Peer {
             MessageType::Open => {
                 self.metrics.inc(&self.metrics.messages_rx_open);
                 let open = OpenMessage::parse(msg.body)?;
-                self.peer_capabilities =
-                    Capability::parse_from_open_params(&open.optional_params);
-                let cap_strs: Vec<String> =
-                    self.peer_capabilities.iter().map(|c| c.to_string()).collect();
+                self.peer_capabilities = Capability::parse_from_open_params(&open.optional_params);
+                let cap_strs: Vec<String> = self
+                    .peer_capabilities
+                    .iter()
+                    .map(|c| c.to_string())
+                    .collect();
                 info!(
                     peer = %self.addr,
                     "Received OPEN AS={} hold_time={} id={} caps=[{}]",
@@ -274,9 +276,8 @@ impl Peer {
                 let withdrawn_count = update.withdrawn_routes.len();
 
                 // RFC 4724 §4.1: End-of-RIB marker — empty withdrawn, empty NLRI, empty attrs
-                let is_end_of_rib = nlri_count == 0
-                    && withdrawn_count == 0
-                    && update.path_attributes.is_empty();
+                let is_end_of_rib =
+                    nlri_count == 0 && withdrawn_count == 0 && update.path_attributes.is_empty();
 
                 self.metrics
                     .routes_received

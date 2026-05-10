@@ -453,7 +453,13 @@ mod tests {
         // Default route 0.0.0.0/0
         let default = Prefix::new(Ipv4Addr::new(0, 0, 0, 0), 0);
         let specific = Prefix::new(Ipv4Addr::new(10, 0, 0, 0), 8);
-        rib.process_update(peer(1), 65001, &[default.clone(), specific.clone()], &attrs, &[]);
+        rib.process_update(
+            peer(1),
+            65001,
+            &[default.clone(), specific.clone()],
+            &attrs,
+            &[],
+        );
 
         // 10.5.0.1 should prefer the /8
         let (key, _) = rib.longest_match(Ipv4Addr::new(10, 5, 0, 1)).unwrap();
