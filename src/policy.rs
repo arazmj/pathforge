@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_variables)]
+
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 

@@ -7,12 +7,14 @@ use tokio::net::TcpStream;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, error, info, warn};
 
+use crate::capabilities::Capability;
 use crate::fsm::{BgpEvent, BgpState};
 use crate::message::keepalive::KeepaliveMessage;
 use crate::message::notification::NotificationMessage;
 use crate::message::open::OpenMessage;
 use crate::message::update::UpdateMessage;
-use crate::message::{BgpMessage, MessageType, HEADER_LEN};
+use crate::message::{BgpMessage, MessageType};
+use crate::metrics::Metrics;
 use crate::rib::Rib;
 use crate::timer::{BgpTimers, LocalConfig};
 
@@ -25,7 +27,9 @@ pub struct Peer {
     pub timers: BgpTimers,
     pub negotiated_hold_time: u16,
     pub peer_router_id: Option<std::net::Ipv4Addr>,
+    pub peer_capabilities: Vec<Capability>,
     pub rib: Arc<RwLock<Rib>>,
+    pub metrics: Arc<Metrics>,
 }
 
 impl Peer {
@@ -34,6 +38,7 @@ impl Peer {
         remote_as: u32,
         local: LocalConfig,
         rib: Arc<RwLock<Rib>>,
+        metrics: Arc<Metrics>,
     ) -> Self {
         let timers = BgpTimers::new(local.hold_time);
         Self {
@@ -44,7 +49,9 @@ impl Peer {
             timers,
             negotiated_hold_time: 90,
             peer_router_id: None,
+            peer_capabilities: Vec::new(),
             rib,
+            metrics,
         }
     }
 
@@ -74,9 +81,11 @@ impl Peer {
         peer_addr: SocketAddr,
         local: LocalConfig,
         rib: Arc<RwLock<Rib>>,
+        metrics: Arc<Metrics>,
     ) -> Result<()> {
         info!(peer = %peer_addr, "Incoming TCP connection");
-        let mut peer = Peer::new(peer_addr, 0, local.clone(), rib);
+        metrics.inc(&metrics.sessions_active);
+        let mut peer = Peer::new(peer_addr, 0, local.clone(), rib, metrics);
         peer.transition(BgpEvent::ManualStart);
         peer.transition(BgpEvent::TcpConnectionConfirmed);
         peer.run_session(stream).await
@@ -84,11 +93,21 @@ impl Peer {
 
     /// Run the BGP session event loop on an established TCP stream.
     async fn run_session(&mut self, mut stream: TcpStream) -> Result<()> {
-        // Send OPEN
-        let open = OpenMessage::new(
-            self.local.local_as as u16,
+        self.metrics.inc(&self.metrics.messages_tx_open);
+
+        // Send OPEN with capabilities (RFC 5492)
+        let local_caps = [
+            Capability::FourOctetAsn {
+                asn: self.local.local_as,
+            },
+            Capability::RouteRefresh,
+            Capability::MultiProtocol { afi: 1, safi: 1 }, // IPv4 Unicast
+        ];
+        let open = OpenMessage::new_with_capabilities(
+            self.local.local_as.min(u16::MAX as u32) as u16,
             self.local.hold_time,
             self.local.router_id,
+            &local_caps,
         );
         stream.write_all(&open.serialize()).await?;
         debug!(peer = %self.addr, "Sent OPEN (AS={}, hold_time={})", self.local.local_as, self.local.hold_time);
@@ -99,13 +118,17 @@ impl Peer {
             // Check hold timer
             if self.timers.hold_timer_expired() {
                 warn!(peer = %self.addr, "Hold timer expired");
+                self.metrics.inc(&self.metrics.hold_timer_expirations);
                 let notif = NotificationMessage::hold_timer_expired();
                 let _ = stream.write_all(&notif.serialize()).await;
+                self.metrics.inc(&self.metrics.messages_tx_notification);
                 self.transition(BgpEvent::HoldTimerExpired);
                 // Clean up RIB
                 if let Ok(mut rib) = self.rib.write() {
                     rib.remove_peer(self.addr);
                 }
+                self.metrics.inc(&self.metrics.sessions_failed);
+                self.metrics.set(&self.metrics.sessions_active, 0);
                 return Ok(());
             }
 
@@ -113,6 +136,7 @@ impl Peer {
             if self.state == BgpState::Established && self.timers.keepalive_due() {
                 stream.write_all(&KeepaliveMessage.serialize()).await?;
                 self.timers.reset_keepalive_timer();
+                self.metrics.inc(&self.metrics.messages_tx_keepalive);
                 debug!(peer = %self.addr, "Sent KEEPALIVE");
             }
 
@@ -124,6 +148,7 @@ impl Peer {
                         Ok(0) => {
                             info!(peer = %self.addr, "Connection closed by peer");
                             self.transition(BgpEvent::TcpConnectionFail);
+                            self.metrics.set(&self.metrics.sessions_active, 0);
                             if let Ok(mut rib) = self.rib.write() {
                                 let removed = rib.remove_peer(self.addr);
                                 if !removed.is_empty() {
@@ -155,8 +180,17 @@ impl Peer {
     async fn handle_message(&mut self, msg: BgpMessage, stream: &mut TcpStream) -> Result<()> {
         match msg.header.msg_type {
             MessageType::Open => {
+                self.metrics.inc(&self.metrics.messages_rx_open);
                 let open = OpenMessage::parse(msg.body)?;
-                info!(peer = %self.addr, "Received OPEN AS={} hold_time={} id={}", open.my_as, open.hold_time, open.bgp_id);
+                self.peer_capabilities =
+                    Capability::parse_from_open_params(&open.optional_params);
+                let cap_strs: Vec<String> =
+                    self.peer_capabilities.iter().map(|c| c.to_string()).collect();
+                info!(
+                    peer = %self.addr,
+                    "Received OPEN AS={} hold_time={} id={} caps=[{}]",
+                    open.my_as, open.hold_time, open.bgp_id, cap_strs.join(", ")
+                );
                 self.peer_router_id = Some(open.bgp_id);
                 self.remote_as = open.my_as as u32;
                 self.negotiated_hold_time = self.local.hold_time.min(open.hold_time);
@@ -164,24 +198,34 @@ impl Peer {
                 self.timers.reset_hold_timer();
                 self.transition(BgpEvent::BgpOpen);
                 stream.write_all(&KeepaliveMessage.serialize()).await?;
+                self.metrics.inc(&self.metrics.messages_tx_keepalive);
                 debug!(peer = %self.addr, "Sent KEEPALIVE (OPEN acknowledgement)");
             }
             MessageType::Keepalive => {
+                self.metrics.inc(&self.metrics.messages_rx_keepalive);
                 debug!(peer = %self.addr, "Received KEEPALIVE");
                 self.timers.reset_hold_timer();
                 if self.state == BgpState::OpenConfirm {
                     self.transition(BgpEvent::KeepAliveMsg);
                     self.timers.reset_keepalive_timer();
-                    info!(peer = %self.addr, "BGP session established 🎉");
+                    self.metrics.inc(&self.metrics.sessions_established);
+                    info!(peer = %self.addr, "BGP session established");
                 }
             }
             MessageType::Update => {
+                self.metrics.inc(&self.metrics.messages_rx_update);
                 let update = UpdateMessage::parse(msg.body)?;
                 self.timers.reset_hold_timer();
                 self.transition(BgpEvent::UpdateMsg);
 
                 let nlri_count = update.nlri.len();
                 let withdrawn_count = update.withdrawn_routes.len();
+                self.metrics
+                    .routes_received
+                    .fetch_add(nlri_count as u64, std::sync::atomic::Ordering::Relaxed);
+                self.metrics
+                    .routes_withdrawn
+                    .fetch_add(withdrawn_count as u64, std::sync::atomic::Ordering::Relaxed);
 
                 if let Ok(mut rib) = self.rib.write() {
                     rib.process_update(
@@ -192,6 +236,9 @@ impl Peer {
                         &update.withdrawn_routes,
                     );
                     let (_, _, loc_count) = rib.summary();
+                    self.metrics
+                        .routes_loc_rib
+                        .store(loc_count as u64, std::sync::atomic::Ordering::Relaxed);
                     info!(
                         peer = %self.addr,
                         "+{} -{} routes | Loc-RIB: {} prefixes",
@@ -200,9 +247,12 @@ impl Peer {
                 }
             }
             MessageType::Notification => {
+                self.metrics.inc(&self.metrics.messages_rx_notification);
                 let notif = NotificationMessage::parse(msg.body)?;
                 warn!(peer = %self.addr, "Received NOTIFICATION code={} subcode={}", notif.error_code, notif.error_subcode);
                 self.transition(BgpEvent::NotifMsg);
+                self.metrics.inc(&self.metrics.sessions_failed);
+                self.metrics.set(&self.metrics.sessions_active, 0);
                 if let Ok(mut rib) = self.rib.write() {
                     rib.remove_peer(self.addr);
                 }

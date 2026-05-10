@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use bytes::{Buf, BufMut, BytesMut};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use thiserror::Error;

@@ -27,12 +27,13 @@ pub struct RouterConfig {
     #[serde(default = "default_hold_time")]
     pub hold_time: u16,
     /// Keepalive interval in seconds (default: hold_time / 3).
+    #[allow(dead_code)]
     #[serde(default)]
     pub keepalive_interval: Option<u16>,
 }
 
 fn default_listen() -> SocketAddr {
-    "0.0.0.0:179".parse().unwrap()
+    "0.0.0.0:179".parse().expect("valid default listen address")
 }
 
 fn default_hold_time() -> u16 {
@@ -41,6 +42,7 @@ fn default_hold_time() -> u16 {
 
 /// Per-neighbor (peer) configuration.
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct NeighborConfig {
     /// Peer IP address.
     pub addr: IpAddr,
@@ -60,6 +62,7 @@ pub struct NeighborConfig {
 }
 
 impl NeighborConfig {
+    #[allow(dead_code)]
     pub fn socket_addr(&self, port: u16) -> SocketAddr {
         SocketAddr::new(self.addr, port)
     }
@@ -119,6 +122,7 @@ impl Config {
     }
 
     /// Parse configuration from a TOML string.
+    #[allow(dead_code)]
     pub fn from_str(s: &str) -> Result<Self> {
         let config: Config = toml::from_str(s)?;
         config.validate()?;

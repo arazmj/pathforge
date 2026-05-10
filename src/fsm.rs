@@ -34,6 +34,7 @@ pub enum BgpEvent {
     /// Administrative start (operator brings up the peer).
     ManualStart,
     /// Administrative stop (operator brings down the peer).
+    #[allow(dead_code)]
     ManualStop,
     /// TCP connection successfully established.
     TcpConnectionConfirmed,
@@ -50,5 +51,6 @@ pub enum BgpEvent {
     /// Hold timer expired.
     HoldTimerExpired,
     /// Keepalive timer expired (time to send a KEEPALIVE).
+    #[allow(dead_code)]
     KeepaliveTimerExpired,
 }

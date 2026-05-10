@@ -38,6 +38,27 @@ impl OpenMessage {
         }
     }
 
+    /// Build an OPEN message that includes a BGP capabilities optional parameter.
+    pub fn new_with_capabilities(
+        my_as: u16,
+        hold_time: u16,
+        bgp_id: Ipv4Addr,
+        caps: &[crate::capabilities::Capability],
+    ) -> Self {
+        let mut msg = Self::new(my_as, hold_time, bgp_id);
+        if !caps.is_empty() {
+            let mut cap_bytes = Vec::new();
+            for cap in caps {
+                cap_bytes.extend_from_slice(&cap.to_bytes());
+            }
+            msg.optional_params.push(OptionalParam {
+                param_type: 2,
+                value: cap_bytes,
+            });
+        }
+        msg
+    }
+
     /// Parse OPEN message body (excluding header).
     pub fn parse(mut body: impl Buf) -> Result<Self, MessageError> {
         if body.remaining() < 10 {

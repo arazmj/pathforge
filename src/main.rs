@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_imports, unused_variables)]
-
 mod attr;
 mod capabilities;
 mod config;
@@ -64,26 +62,33 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    let local = if let Some(config_path) = cli.config {
+    let (local, listen) = if let Some(config_path) = cli.config {
         let cfg = config::Config::from_file(&config_path)?;
-        tracing::info!(path = %config_path.display(), "Loaded configuration");
+        tracing::info!(
+            path = %config_path.display(),
+            neighbors = cfg.neighbors.len(),
+            prefix_lists = cfg.policy.prefix_lists.len(),
+            "Loaded configuration"
+        );
         let mut lc = LocalConfig::new(cfg.router.local_as, cfg.router.router_id);
         lc.hold_time = cfg.router.hold_time;
-        lc
+        let listen = cli.listen.unwrap_or(cfg.router.listen);
+        (lc, listen)
     } else {
         let mut lc = LocalConfig::new(
             cli.local_as.unwrap_or(65000),
             cli.router_id.unwrap_or(Ipv4Addr::new(1, 1, 1, 1)),
         );
         lc.hold_time = cli.hold_time.unwrap_or(90);
-        lc
+        let listen = cli
+            .listen
+            .unwrap_or_else(|| "0.0.0.0:179".parse().expect("valid default bind address"));
+        (lc, listen)
     };
-
-    let listen = cli.listen.unwrap_or_else(|| "0.0.0.0:179".parse().unwrap());
-    let server = Server::new(listen, local);
+    let metrics = Metrics::shared();
+    let server = Server::new(listen, local, metrics.clone());
     let rib = server.rib();
     let mgmt_state = MgmtState::shared();
-    let metrics = Metrics::shared();
 
     // Start management server concurrently
     let mgmt = MgmtServer::new(&cli.mgmt_socket, mgmt_state, rib, metrics);

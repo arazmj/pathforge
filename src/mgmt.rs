@@ -134,8 +134,8 @@ fn process_command(
 }
 
 fn cmd_bgp_summary(state: &Arc<RwLock<MgmtState>>, rib: &Arc<RwLock<Rib>>) -> String {
-    let state = state.read().unwrap();
-    let rib = rib.read().unwrap();
+    let state = state.read().unwrap_or_else(|e| e.into_inner());
+    let rib = rib.read().unwrap_or_else(|e| e.into_inner());
     let (_, _, loc_count) = rib.summary();
 
     let mut out = String::new();
@@ -165,7 +165,7 @@ fn cmd_bgp_summary(state: &Arc<RwLock<MgmtState>>, rib: &Arc<RwLock<Rib>>) -> St
 }
 
 fn cmd_bgp_rib(rib: &Arc<RwLock<Rib>>) -> String {
-    let rib = rib.read().unwrap();
+    let rib = rib.read().unwrap_or_else(|e| e.into_inner());
     let loc_rib = rib.loc_rib();
 
     if loc_rib.is_empty() {
@@ -225,7 +225,7 @@ fn cmd_bgp_rib(rib: &Arc<RwLock<Rib>>) -> String {
 
 fn cmd_bgp_rib_prefix(rib: &Arc<RwLock<Rib>>, prefix_str: &str) -> String {
     use crate::rib::PrefixKey;
-    let rib = rib.read().unwrap();
+    let rib = rib.read().unwrap_or_else(|e| e.into_inner());
 
     let (addr_s, len_s) = match prefix_str.split_once('/') {
         Some(p) => p,
@@ -305,7 +305,7 @@ fn cmd_bgp_rib_prefix(rib: &Arc<RwLock<Rib>>, prefix_str: &str) -> String {
 }
 
 fn cmd_bgp_neighbors(state: &Arc<RwLock<MgmtState>>, filter_ip: Option<&&str>) -> String {
-    let state = state.read().unwrap();
+    let state = state.read().unwrap_or_else(|e| e.into_inner());
     let mut out = String::new();
 
     let peers: Vec<&PeerInfo> = if let Some(ip) = filter_ip {

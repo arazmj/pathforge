@@ -12,6 +12,7 @@ pub struct Prefix {
 }
 
 impl Prefix {
+    #[allow(dead_code)]
     pub fn new(address: Ipv4Addr, prefix_len: u8) -> Self {
         Self {
             address,
@@ -20,6 +21,7 @@ impl Prefix {
     }
 
     /// Number of bytes needed to encode the prefix (ceil(prefix_len / 8)).
+    #[allow(dead_code)]
     pub fn encoded_len(&self) -> usize {
         (self.prefix_len as usize).div_ceil(8)
     }
@@ -50,6 +52,7 @@ impl Prefix {
         })
     }
 
+    #[allow(dead_code)]
     pub fn serialize(&self, buf: &mut BytesMut) {
         buf.put_u8(self.prefix_len);
         let bytes = self.address.octets();
@@ -132,6 +135,7 @@ impl UpdateMessage {
     }
 
     /// Serialize UPDATE message (header + body).
+    #[allow(dead_code)]
     pub fn serialize(&self) -> BytesMut {
         let mut withdrawn_buf = BytesMut::new();
         for prefix in &self.withdrawn_routes {

@@ -18,6 +18,7 @@ pub enum Capability {
 }
 
 impl Capability {
+    #[allow(dead_code)]
     pub fn code(&self) -> u8 {
         match self {
             Self::MultiProtocol { .. } => 1,
@@ -51,6 +52,19 @@ impl Capability {
         let mut out = vec![code, value.len() as u8];
         out.extend_from_slice(&value);
         out
+    }
+
+    /// Parse capabilities from already-decoded `OptionalParam` list (from a parsed OPEN).
+    pub fn parse_from_open_params(
+        params: &[crate::message::open::OptionalParam],
+    ) -> Vec<Capability> {
+        let mut raw = Vec::new();
+        for p in params {
+            raw.push(p.param_type);
+            raw.push(p.value.len() as u8);
+            raw.extend_from_slice(&p.value);
+        }
+        Self::parse_optional_params(&raw)
     }
 
     /// Parse capabilities from the optional parameters section of a BGP OPEN message.
@@ -125,6 +139,7 @@ impl fmt::Display for Capability {
 }
 
 /// Build the capability optional parameters block for a BGP OPEN message
+#[allow(dead_code)]
 pub fn build_capabilities(caps: &[Capability]) -> Vec<u8> {
     // Encode as a single type=2 optional parameter containing all capabilities
     let mut cap_bytes = Vec::new();

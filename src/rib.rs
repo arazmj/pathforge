@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::{Arc, RwLock};
 
 use crate::attr::PathAttributes;
@@ -9,6 +9,7 @@ use crate::message::update::Prefix;
 #[derive(Debug, Clone)]
 pub struct Route {
     /// The network prefix for this route.
+    #[allow(dead_code)]
     pub prefix: Prefix,
     /// BGP path attributes associated with this route.
     pub attrs: PathAttributes,
@@ -74,6 +75,7 @@ pub struct Rib {
     /// The best route for each prefix (Loc-RIB).
     loc_rib: LocRib,
     /// Adj-RIB-Out per peer (routes to advertise).
+    #[allow(dead_code)]
     adj_rib_out: HashMap<SocketAddr, AdjRibOut>,
 }
 
@@ -191,11 +193,13 @@ impl Rib {
     }
 
     /// Get all routes from Adj-RIB-In for a peer.
+    #[allow(dead_code)]
     pub fn adj_rib_in(&self, peer_addr: &SocketAddr) -> Option<&AdjRibIn> {
         self.adj_rib_in.get(peer_addr)
     }
 
     /// Number of prefixes in the Loc-RIB.
+    #[allow(dead_code)]
     pub fn prefix_count(&self) -> usize {
         self.loc_rib.len()
     }
@@ -211,27 +215,6 @@ impl Rib {
 mod tests {
     use super::*;
     use crate::attr::{AsPathSegment, Origin};
-
-    fn make_route(
-        prefix: Prefix,
-        peer: SocketAddr,
-        local_pref: u32,
-        as_path_len: usize,
-    ) -> (Prefix, PathAttributes) {
-        let attrs = PathAttributes {
-            origin: Some(Origin::Igp),
-            local_pref: Some(local_pref),
-            as_path: if as_path_len > 0 {
-                vec![AsPathSegment::AsSequence(
-                    (65001u32..).take(as_path_len).collect(),
-                )]
-            } else {
-                vec![]
-            },
-            ..Default::default()
-        };
-        (prefix, attrs)
-    }
 
     fn peer(n: u8) -> SocketAddr {
         format!("10.0.0.{}:179", n).parse().unwrap()

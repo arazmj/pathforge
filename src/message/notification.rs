@@ -4,6 +4,7 @@ use bytes::{Buf, BufMut, BytesMut};
 /// BGP NOTIFICATION error codes (RFC 4271 §4.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[allow(dead_code)]
 pub enum ErrorCode {
     MessageHeaderError = 1,
     OpenMessageError = 2,
@@ -32,6 +33,7 @@ impl NotificationMessage {
         }
     }
 
+    #[allow(dead_code)]
     pub fn cease() -> Self {
         Self::new(ErrorCode::Cease, 0)
     }

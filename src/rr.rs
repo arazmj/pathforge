@@ -1,9 +1,8 @@
+#![allow(dead_code, unused_imports)]
+
 use std::net::{Ipv4Addr, SocketAddr};
-use std::sync::{Arc, RwLock};
 
 use crate::attr::PathAttributes;
-use crate::message::update::Prefix;
-use crate::rib::Rib;
 
 /// Route Reflector role for a peer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

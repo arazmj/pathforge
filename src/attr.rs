@@ -5,6 +5,7 @@ use thiserror::Error;
 /// BGP path attribute type codes (RFC 4271 §5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[allow(dead_code)]
 pub enum AttrType {
     Origin = 1,
     AsPath = 2,
@@ -59,11 +60,13 @@ pub enum AsPathSegment {
 }
 
 impl AsPathSegment {
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         match self {
             AsPathSegment::AsSet(v) | AsPathSegment::AsSequence(v) => v.len(),
         }
     }
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -83,6 +86,7 @@ pub enum AttrError {
     InvalidOrigin(u8),
     #[error("Invalid AS_PATH segment type: {0}")]
     InvalidAsPathSegment(u8),
+    #[allow(dead_code)]
     #[error("Parse error: {0}")]
     Parse(String),
 }
@@ -134,6 +138,7 @@ impl std::fmt::Display for Community {
 
 /// Raw unknown attribute for pass-through.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct RawAttribute {
     pub flags: u8,
     pub type_code: u8,
@@ -141,7 +146,9 @@ pub struct RawAttribute {
 }
 
 /// Path attribute flags (RFC 4271 §4.3).
+#[allow(dead_code)]
 const FLAG_OPTIONAL: u8 = 0x80;
+#[allow(dead_code)]
 const FLAG_TRANSITIVE: u8 = 0x40;
 const FLAG_EXTENDED_LEN: u8 = 0x10;
 
@@ -270,6 +277,7 @@ impl PathAttributes {
     }
 
     /// Serialize all path attributes into a byte buffer.
+    #[allow(dead_code)]
     pub fn serialize(&self) -> BytesMut {
         let mut buf = BytesMut::new();
 

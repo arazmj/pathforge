@@ -1,9 +1,10 @@
 use anyhow::Result;
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use tokio::net::TcpListener;
 use tracing::info;
 
+use crate::metrics::Metrics;
 use crate::peer::Peer;
 use crate::rib::Rib;
 use crate::timer::LocalConfig;
@@ -13,14 +14,16 @@ pub struct Server {
     bind_addr: SocketAddr,
     local: LocalConfig,
     rib: Arc<RwLock<Rib>>,
+    metrics: Arc<Metrics>,
 }
 
 impl Server {
-    pub fn new(bind_addr: SocketAddr, local: LocalConfig) -> Self {
+    pub fn new(bind_addr: SocketAddr, local: LocalConfig, metrics: Arc<Metrics>) -> Self {
         Self {
             bind_addr,
             local,
             rib: Rib::shared(),
+            metrics,
         }
     }
 
@@ -37,8 +40,11 @@ impl Server {
             info!(peer = %peer_addr, "Accepted TCP connection");
             let local = self.local.clone();
             let rib = self.rib.clone();
+            let metrics = self.metrics.clone();
             tokio::spawn(async move {
-                if let Err(e) = Peer::handle_incoming(stream, peer_addr, local, rib).await {
+                if let Err(e) =
+                    Peer::handle_incoming(stream, peer_addr, local, rib, metrics).await
+                {
                     tracing::error!(peer = %peer_addr, error = %e, "Peer session error");
                 }
             });

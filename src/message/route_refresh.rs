@@ -10,10 +10,12 @@ pub struct RouteRefresh {
 }
 
 impl RouteRefresh {
+    #[allow(dead_code)]
     pub fn new(afi: u16, safi: u8) -> Self {
         Self { afi, safi }
     }
 
+    #[allow(dead_code)]
     pub fn parse(data: &[u8]) -> Option<Self> {
         if data.len() < 4 {
             return None;
@@ -24,6 +26,7 @@ impl RouteRefresh {
         })
     }
 
+    #[allow(dead_code)]
     pub fn serialize(&self) -> BytesMut {
         let mut buf = BytesMut::new();
         // BGP header
