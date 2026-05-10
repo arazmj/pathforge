@@ -1,55 +1,86 @@
-# PathForge 🦀
+# PathForge
 
-> A feature-rich BGP-4 daemon written in Rust
+> A BGP-4 daemon written in Rust, built from scratch against RFC 4271
 
 [![Build Status](https://github.com/arazmj/pathforge/actions/workflows/rust.yml/badge.svg)](https://github.com/arazmj/pathforge/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-PathForge is a from-scratch implementation of the **Border Gateway Protocol version 4** ([RFC 4271](https://datatracker.ietf.org/doc/html/rfc4271)) written in Rust. It is designed for correctness, observability, and extensibility.
+PathForge is a from-scratch implementation of the **Border Gateway Protocol version 4** ([RFC 4271](https://datatracker.ietf.org/doc/html/rfc4271)) written in Rust. It is designed for correctness, observability, and extensibility — 5 400 lines of Rust, 109 unit tests, 4 fuzz harnesses.
 
 ---
 
 ## Features
 
+### Protocol Core
+
+| Feature | RFC | Status |
+|---------|-----|--------|
+| BGP-4 message framing (19-byte header, marker) | RFC 4271 §4.1 | ✅ |
+| OPEN message — version, AS, hold time, router-id | RFC 4271 §4.2 | ✅ |
+| KEEPALIVE message | RFC 4271 §4.4 | ✅ |
+| UPDATE message — withdrawn routes, path attrs, NLRI | RFC 4271 §4.3 | ✅ |
+| NOTIFICATION message — error codes + subcodes | RFC 4271 §4.5 | ✅ |
+| BGP FSM — all 6 states, all RFC-defined transitions | RFC 4271 §8 | ✅ |
+| Hold timer & keepalive timer | RFC 4271 §10 | ✅ |
+| ROUTE-REFRESH message | RFC 2918 | ✅ |
+
+### Path Attributes
+
+| Attribute | RFC | Status |
+|-----------|-----|--------|
+| ORIGIN, AS_PATH (2-byte + 4-byte), NEXT_HOP | RFC 4271 | ✅ |
+| MED, LOCAL_PREF, ATOMIC_AGGREGATE, AGGREGATOR | RFC 4271 | ✅ |
+| COMMUNITIES (well-known + numeric) | RFC 1997 | ✅ |
+| ORIGINATOR_ID, CLUSTER_LIST | RFC 4456 | ✅ |
+| MP_REACH_NLRI / MP_UNREACH_NLRI (IPv4 + IPv6) | RFC 4760 | ✅ |
+| Unknown attributes — pass-through | RFC 4271 | ✅ |
+
+### Capability Negotiation
+
+| Capability | RFC | Status |
+|------------|-----|--------|
+| Capability optional parameter framing | RFC 5492 | ✅ |
+| Multi-Protocol (AFI/SAFI) | RFC 4760 | ✅ |
+| Route Refresh | RFC 2918 | ✅ |
+| 4-byte AS Number | RFC 6793 | ✅ |
+| Graceful Restart | RFC 4724 | ✅ |
+
+### RIB & Decision Process
+
+| Feature | RFC | Status |
+|---------|-----|--------|
+| Adj-RIB-In per peer | RFC 4271 §9 | ✅ |
+| Loc-RIB with best-path selection | RFC 4271 §9.1 | ✅ |
+| Decision process: LOCAL_PREF → AS_PATH → ORIGIN → MED | RFC 4271 §9.1.2 | ✅ |
+| Adj-RIB-Out (data structure) | RFC 4271 §9 | ✅ |
+| Longest Prefix Match lookup | — | ✅ |
+| Graceful Restart — stale routes + restart timer | RFC 4724 | ✅ |
+| End-of-RIB marker detection | RFC 4724 §4.1 | ✅ |
+| Route Dampening — penalty, suppress, reuse | RFC 2439 | ✅ |
+| RPKI/ROA validation (Disabled / Loose / Strict) | RFC 6811 | ✅ |
+
+### Routing Policy
+
 | Feature | Status |
 |---------|--------|
-| BGP OPEN message parsing & serialization | ✅ |
-| BGP KEEPALIVE message | ✅ |
-| BGP UPDATE message (NLRI + withdrawn routes) | ✅ |
-| NOTIFICATION message | ✅ |
-| BGP message header (19-byte, RFC 4271 §4.1) | ✅ |
-| BGP FSM — full RFC 4271 §8 (all 6 states + transitions) | ✅ |
-| Hold timer & keepalive timer | ✅ |
-| BGP session event loop (async tokio task per peer) | ✅ |
-| Path attributes: ORIGIN, AS_PATH (4-byte), NEXT_HOP, MED, LOCAL_PREF | ✅ |
-| Path attributes: ATOMIC_AGGREGATE, AGGREGATOR, COMMUNITIES (RFC 1997) | ✅ |
-| Path attributes: ORIGINATOR_ID, CLUSTER_LIST, unknown pass-through | ✅ |
-| Routing Information Base: Adj-RIB-In, Loc-RIB, Adj-RIB-Out | ✅ |
-| BGP decision process (LOCAL_PREF → AS_PATH → ORIGIN → MED) | ✅ |
-| Route withdrawal propagation to RIB | ✅ |
-| NOTIFICATION messages & error handling | ✅ |
-| TOML configuration file (router, neighbors, policy) | ✅ |
-| BGP Communities (RFC 1997): parsing, well-known, display | ✅ |
-| Route filtering: prefix lists (ge/le range), community lists | ✅ |
-| Import/export policy engine | ✅ |
-| Multi-protocol extensions: AFI/SAFI (RFC 4760) | ✅ |
-| IPv6 unicast: MP_REACH_NLRI / MP_UNREACH_NLRI | ✅ |
-| Management CLI via Unix socket | ✅ |
-| Commands: show bgp summary/rib/neighbors, show bgp rib prefix | ✅ |
-| Route Reflector (RFC 4456): client/non-client, loop detection | ✅ |
-| ORIGINATOR_ID + CLUSTER_LIST attribute handling (RFC 4456) | ✅ |
-| Prometheus metrics endpoint (sessions, messages, routes, errors) | ✅ |
-| `show bgp metrics` and `metrics` management commands | ✅ |
-| Python smoke test suite (`tests/smoke_test.py`) | ✅ |
-| Docker Compose environment (pathforge + FRRouting) | ✅ |
-| Makefile: `make up/down/logs/smoke/test` | ✅ |
-| GitHub Actions CI (unit tests + smoke tests + binary artifact) | ✅ |
-| E2E test script (`tests/e2e.sh`) | ✅ |
-| Capability negotiation (RFC 5492): Multi-Protocol, Route-Refresh, 4-byte ASN, Graceful Restart | ✅ |
-| ROUTE-REFRESH message (RFC 2918) | ✅ |
-| 4-byte AS number capability (RFC 6793) | ✅ |
-| Graceful Restart capability advertisement (RFC 4724) | ✅ |
-| gRPC / REST API | ⏳ Planned |
+| Named prefix lists (permit/deny, ge/le range) | ✅ |
+| Named community lists | ✅ |
+| Import / export policy per neighbor | ✅ |
+| Route Reflector — client/non-client, loop detection | ✅ |
+
+### Operations
+
+| Feature | Status |
+|---------|--------|
+| TOML configuration file | ✅ |
+| Config validation (router-id, AS, hold time, neighbor checks) | ✅ |
+| MD5 TCP authentication config (RFC 2385) | ✅ |
+| Unix socket management CLI | ✅ |
+| Prometheus metrics (sessions, messages, routes, errors) | ✅ |
+| Structured logging with `tracing` + `#[instrument]` spans | ✅ |
+| Docker Compose test environment (PathForge + FRRouting) | ✅ |
+| GitHub Actions CI (test, coverage, build, security audit) | ✅ |
+| cargo-fuzz harnesses (4 targets) | ✅ |
 
 ---
 
@@ -58,27 +89,64 @@ PathForge is a from-scratch implementation of the **Border Gateway Protocol vers
 ```
 pathforge/
 ├── src/
-│   ├── main.rs       # Entry point, CLI argument parsing
-│   ├── server.rs     # TCP listener, connection dispatch
-│   ├── peer.rs       # Peer state, connection handler
-│   ├── mgmt.rs       # Management socket: show bgp summary/rib/neighbors commands
-│   ├── message/      # BGP message types
-│   │   ├── mod.rs        # Header, BgpMessage, MessageType
-│   │   ├── open.rs       # OPEN message (RFC 4271 §4.2)
-│   │   ├── keepalive.rs  # KEEPALIVE message (RFC 4271 §4.4)
-│   │   ├── notification.rs # NOTIFICATION message (RFC 4271 §4.5)
-│   │   └── update.rs     # UPDATE message + NLRI prefix parsing (RFC 4271 §4.3)
-└── Cargo.toml
+│   ├── main.rs          # CLI (clap), initializes Server + MgmtServer
+│   ├── lib.rs           # Library root — exposes all modules for fuzz + external use
+│   ├── server.rs        # TCP listener; spawns one Tokio task per peer
+│   ├── peer.rs          # Per-peer session loop; drives the FSM
+│   ├── fsm.rs           # BgpState + BgpEvent enums (RFC 4271 §8)
+│   ├── timer.rs         # Hold timer, keepalive timer, LocalConfig
+│   ├── message/
+│   │   ├── mod.rs           # Header, BgpMessage, MessageType
+│   │   ├── open.rs          # OPEN message (RFC 4271 §4.2)
+│   │   ├── keepalive.rs     # KEEPALIVE (RFC 4271 §4.4)
+│   │   ├── notification.rs  # NOTIFICATION (RFC 4271 §4.5)
+│   │   ├── update.rs        # UPDATE + NLRI prefix parsing (RFC 4271 §4.3)
+│   │   └── route_refresh.rs # ROUTE-REFRESH (RFC 2918)
+│   ├── attr.rs          # Path attribute parsing/serialization
+│   ├── capabilities.rs  # Capability negotiation (RFC 5492 + 4760 + 6793 + 4724 + 2918)
+│   ├── rib.rs           # Adj-RIB-In, Loc-RIB, Adj-RIB-Out; decision process; LPM
+│   ├── dampening.rs     # Route dampening engine (RFC 2439)
+│   ├── rpki.rs          # RPKI/ROA validation stub (RFC 6811)
+│   ├── rr.rs            # Route Reflector logic (RFC 4456)
+│   ├── policy.rs        # Prefix-list + community-list filtering
+│   ├── mp.rs            # Multi-protocol NLRI (RFC 4760)
+│   ├── metrics.rs       # Prometheus counters (atomic u64)
+│   ├── mgmt.rs          # Unix socket management API
+│   └── config.rs        # TOML config loading + validation
+├── fuzz/
+│   └── fuzz_targets/
+│       ├── fuzz_bgp_message.rs    # Fuzzes BgpMessage::parse()
+│       ├── fuzz_open_message.rs   # Fuzzes OpenMessage::parse()
+│       ├── fuzz_update_message.rs # Fuzzes UpdateMessage::parse()
+│       └── fuzz_path_attrs.rs     # Fuzzes PathAttributes::parse()
+└── tests/
+    ├── smoke_test.py    # Full BGP handshake → UPDATE → RIB verification
+    └── e2e.sh           # Docker Compose end-to-end script
 ```
 
 ### BGP State Machine
-
-PathForge implements the RFC 4271 FSM with these states:
 
 ```
 Idle → Connect → OpenSent → OpenConfirm → Established
           ↓
         Active
+```
+
+### Key Data Flow
+
+```
+TCP accept (server.rs)
+  → Peer::handle_incoming (peer.rs)
+    → run_session: send OPEN (with capabilities) → recv OPEN → KEEPALIVE exchange → Established
+    → handle_message:
+        UPDATE  → dampening check → RPKI validation → rib.process_update()
+                → decision process → Loc-RIB
+        GR disconnect → rib.mark_peer_stale() → stale-timer task
+        End-of-RIB → rib.remove_stale_for_peer()
+        NOTIFICATION → rib.remove_peer()
+        KEEPALIVE → reset hold timer
+  → metrics counters incremented throughout
+  → MgmtServer reads RIB over Unix socket
 ```
 
 ---
@@ -97,56 +165,37 @@ cd pathforge
 cargo build --release
 ```
 
-### Management CLI
-
-Connect to the management interface via Unix socket (default `/tmp/pathforge.sock`):
-
-```bash
-nc -U /tmp/pathforge.sock
-# or
-socat - UNIX-CONNECT:/tmp/pathforge.sock
-```
-
-Available commands:
-
-```
-show bgp summary              — Peer summary and Loc-RIB route count
-show bgp rib                  — Full BGP routing table
-show bgp rib prefix 10.0.0.0/8 — Detail for a specific prefix
-show bgp neighbors            — All neighbor details
-show bgp neighbors 192.168.1.2 — Specific neighbor detail
-help                          — Show all commands
-```
-
 ### Run
 
 ```bash
-# Run with a TOML config file
-sudo ./target/release/pathforge --config pathforge.toml
+# From a config file
+sudo ./target/release/pathforge --config pathforge.example.toml
 
-# Or use CLI flags (no config file needed)
+# CLI flags only (no config file)
 sudo ./target/release/pathforge --local-as 65001 --router-id 10.0.0.1
 ```
 
-### Example config (`pathforge.example.toml`)
+### Example config
 
 ```toml
 [router]
-local_as = 65001
-router_id = "10.0.0.1"
-listen = "0.0.0.0:179"
-hold_time = 90
+local_as    = 65001
+router_id   = "10.0.0.1"
+listen      = "0.0.0.0:179"
+hold_time   = 90
 
 [[neighbors]]
-addr = "192.168.1.2"
-remote_as = 65002
+addr        = "192.168.1.2"
+remote_as   = 65002
 description = "Transit provider"
+md5_password = "s3cr3t"         # RFC 2385 — requires Linux TCP_MD5SIG
 import_policy = "import-from-transit"
 
 [[neighbors]]
-addr = "10.0.0.2"
-remote_as = 65001
+addr        = "10.0.0.2"
+remote_as   = 65001
 description = "iBGP peer"
+route_reflector_client = true
 
 [policy]
 [[policy.prefix_lists]]
@@ -159,28 +208,80 @@ entries = [
 
 ---
 
+## Management CLI
+
+Connect via Unix socket (default `/tmp/pathforge.sock`):
+
+```bash
+pathforge-cli() { echo "$1" | socat - UNIX-CONNECT:/tmp/pathforge.sock; }
+
+pathforge-cli "show bgp summary"             # Peer count + Loc-RIB size
+pathforge-cli "show bgp rib"                 # Full routing table (with ROV state)
+pathforge-cli "show bgp rib prefix 10.0.0.0/8"
+pathforge-cli "show bgp rib aspath 65002"    # Routes with AS 65002 in path
+pathforge-cli "show bgp rib nexthop 10.0.0.1"
+pathforge-cli "show bgp neighbors"
+pathforge-cli "show bgp neighbors 10.0.0.1"
+pathforge-cli "show bgp metrics"             # Human-readable counters
+pathforge-cli "metrics"                      # Prometheus exposition format
+pathforge-cli "version"
+```
+
+---
+
+## Tests
+
+```bash
+# Unit tests (109 tests)
+cargo test
+
+# Lint
+cargo clippy --all-targets -- -D warnings
+
+# Format
+cargo fmt --all -- --check
+
+# Smoke test (requires release build + running daemon)
+cargo build --release && python3 tests/smoke_test.py
+```
+
+### Fuzz Testing
+
+```bash
+# Build all 4 fuzz harnesses (requires nightly + cargo-fuzz)
+cargo +nightly fuzz build
+
+# Run a harness (ctrl-c to stop, corpus/crashes saved automatically)
+cargo +nightly fuzz run fuzz_bgp_message
+cargo +nightly fuzz run fuzz_update_message
+cargo +nightly fuzz run fuzz_open_message
+cargo +nightly fuzz run fuzz_path_attrs
+```
+
+The fuzz harnesses exercise the four most security-critical parsing surfaces:
+every harness is required to return `Err` or `None` on malformed input — never panic or exhibit undefined behavior.
+
+---
+
 ## Docker Compose Test Environment
 
-Spin up pathforge alongside **FRRouting** for a real BGP session:
+Spin up PathForge alongside **FRRouting** for a real BGP session:
 
 ```bash
 make up      # Build & start pathforge + FRR containers
 make logs    # Follow logs from both containers
+make smoke   # Python smoke test (handshake + UPDATE + management verification)
 make down    # Tear down and remove volumes
 ```
 
-The network is `172.20.0.0/24`:
-- `172.20.0.2` — PathForge (AS 65001)
-- `172.20.0.3` — FRRouting (AS 65002)
+Network layout (`172.20.0.0/24`):
+
+| Container | IP | AS |
+|-----------|----|----|
+| PathForge | 172.20.0.2 | 65001 |
+| FRRouting | 172.20.0.3 | 65002 |
 
 FRR advertises `10.1.0.0/24` and `10.2.0.0/24` via eBGP to PathForge.
-
-### Smoke Tests
-
-```bash
-make smoke   # Python smoke test (BGP handshake + management socket)
-make test    # cargo test (59 unit tests)
-```
 
 ---
 
@@ -188,10 +289,17 @@ make test    # cargo test (59 unit tests)
 
 | RFC | Description |
 |-----|-------------|
-| [RFC 4271](https://datatracker.ietf.org/doc/html/rfc4271) | A Border Gateway Protocol 4 (BGP-4) |
+| [RFC 4271](https://datatracker.ietf.org/doc/html/rfc4271) | Border Gateway Protocol 4 |
+| [RFC 5492](https://datatracker.ietf.org/doc/html/rfc5492) | Capabilities Advertisement |
 | [RFC 4760](https://datatracker.ietf.org/doc/html/rfc4760) | Multiprotocol Extensions for BGP-4 |
-| [RFC 1997](https://datatracker.ietf.org/doc/html/rfc1997) | BGP Communities Attribute |
+| [RFC 6793](https://datatracker.ietf.org/doc/html/rfc6793) | 4-Octet AS Number |
+| [RFC 2918](https://datatracker.ietf.org/doc/html/rfc2918) | Route Refresh Capability |
+| [RFC 4724](https://datatracker.ietf.org/doc/html/rfc4724) | Graceful Restart |
+| [RFC 2439](https://datatracker.ietf.org/doc/html/rfc2439) | Route Flap Damping |
+| [RFC 6811](https://datatracker.ietf.org/doc/html/rfc6811) | BGP Prefix Origin Validation (RPKI) |
+| [RFC 2385](https://datatracker.ietf.org/doc/html/rfc2385) | TCP MD5 Signature Option |
 | [RFC 4456](https://datatracker.ietf.org/doc/html/rfc4456) | BGP Route Reflection |
+| [RFC 1997](https://datatracker.ietf.org/doc/html/rfc1997) | BGP Communities Attribute |
 | [RFC 4486](https://datatracker.ietf.org/doc/html/rfc4486) | Subcodes for BGP Cease NOTIFICATION |
 
 ---
