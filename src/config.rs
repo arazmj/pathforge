@@ -59,6 +59,18 @@ pub struct NeighborConfig {
     pub import_policy: Option<String>,
     /// Export policy name (applied to routes sent to this peer).
     pub export_policy: Option<String>,
+    /// RFC 2385 — MD5 TCP authentication password.
+    ///
+    /// When set, the `TCP_MD5SIG` socket option must be applied to the
+    /// listening socket and each accepted connection before the BGP session
+    /// is established.  This requires Linux kernel ≥ 2.6.12 (or a BSD with
+    /// `SO_ACCEPTFILTER` + RFC 2385 support); it is not available on macOS.
+    ///
+    /// PathForge stores the password here so that future platform-specific
+    /// code (e.g. a `setsockopt(TCP_MD5SIG)` call in `server.rs`) can read
+    /// it.  Until that code is added, the option is parsed and validated but
+    /// silently ignored at runtime.
+    pub md5_password: Option<String>,
 }
 
 impl NeighborConfig {
@@ -169,6 +181,18 @@ impl Config {
                 if ht != 0 && ht < 3 {
                     anyhow::bail!(
                         "neighbor {}: hold_time must be 0 or >= 3 seconds",
+                        n.addr
+                    );
+                }
+            }
+            // MD5 password: RFC 2385 limits passwords to 80 octets
+            if let Some(pw) = &n.md5_password {
+                if pw.is_empty() {
+                    anyhow::bail!("neighbor {}: md5_password must not be empty", n.addr);
+                }
+                if pw.len() > 80 {
+                    anyhow::bail!(
+                        "neighbor {}: md5_password exceeds 80 bytes (RFC 2385)",
                         n.addr
                     );
                 }
@@ -352,5 +376,59 @@ keepalive_interval = 100
             err.contains("keepalive_interval"),
             "expected keepalive error, got: {err}"
         );
+    }
+
+    #[test]
+    fn test_md5_password_valid() {
+        let s = r#"
+[router]
+local_as = 65000
+router_id = "1.2.3.4"
+
+[[neighbors]]
+addr = "10.0.0.1"
+remote_as = 65001
+md5_password = "secret"
+"#;
+        let cfg = Config::from_str(s).unwrap();
+        assert_eq!(
+            cfg.neighbors[0].md5_password.as_deref(),
+            Some("secret")
+        );
+    }
+
+    #[test]
+    fn test_md5_password_empty_rejected() {
+        let s = r#"
+[router]
+local_as = 65000
+router_id = "1.2.3.4"
+
+[[neighbors]]
+addr = "10.0.0.1"
+remote_as = 65001
+md5_password = ""
+"#;
+        let err = Config::from_str(s).unwrap_err().to_string();
+        assert!(err.contains("md5_password"), "got: {err}");
+    }
+
+    #[test]
+    fn test_md5_password_too_long_rejected() {
+        let long_pw = "x".repeat(81);
+        let s = format!(
+            r#"
+[router]
+local_as = 65000
+router_id = "1.2.3.4"
+
+[[neighbors]]
+addr = "10.0.0.1"
+remote_as = 65001
+md5_password = "{long_pw}"
+"#
+        );
+        let err = Config::from_str(&s).unwrap_err().to_string();
+        assert!(err.contains("md5_password"), "got: {err}");
     }
 }
