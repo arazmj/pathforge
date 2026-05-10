@@ -39,10 +39,13 @@ impl MgmtState {
 /// Supported commands:
 ///   show bgp summary
 ///   show bgp rib
+///   show bgp rib prefix <X.X.X.X/N>
+///   show bgp rib aspath <ASN>
+///   show bgp rib nexthop <X.X.X.X>
 ///   show bgp neighbors [<ip>]
-///   show bgp rib prefix <prefix>
 ///   show bgp metrics
 ///   metrics (Prometheus format)
+///   version
 pub struct MgmtServer {
     socket_path: String,
     state: Arc<RwLock<MgmtState>>,
@@ -121,10 +124,13 @@ fn process_command(
         ["show", "bgp", "summary"] => cmd_bgp_summary(state, rib),
         ["show", "bgp", "rib"] => cmd_bgp_rib(rib),
         ["show", "bgp", "rib", "prefix", prefix] => cmd_bgp_rib_prefix(rib, prefix),
+        ["show", "bgp", "rib", "aspath", asn] => cmd_bgp_rib_aspath(rib, asn),
+        ["show", "bgp", "rib", "nexthop", ip] => cmd_bgp_rib_nexthop(rib, ip),
         ["show", "bgp", "neighbors"] => cmd_bgp_neighbors(state, None),
         ["show", "bgp", "neighbors", ip] => cmd_bgp_neighbors(state, Some(ip)),
         ["show", "bgp", "metrics"] => metrics.text_summary(),
         ["metrics"] => metrics.prometheus_text(),
+        ["version"] => cmd_version(),
         ["help"] | [] => cmd_help(),
         ["quit"] | ["exit"] => "Bye!\n".to_string(),
         _ => format!(
@@ -337,18 +343,122 @@ fn cmd_bgp_neighbors(state: &Arc<RwLock<MgmtState>>, filter_ip: Option<&&str>) -
     out
 }
 
+/// Filter Loc-RIB to routes whose AS_PATH contains a given AS number.
+fn cmd_bgp_rib_aspath(rib: &Arc<RwLock<Rib>>, asn_str: &str) -> String {
+    let asn: u32 = match asn_str.parse() {
+        Ok(v) => v,
+        Err(_) => return format!("Invalid AS number: '{}'\n", asn_str),
+    };
+    let rib = rib.read().unwrap_or_else(|e| e.into_inner());
+    let loc_rib = rib.loc_rib();
+
+    let mut matches: Vec<_> = loc_rib
+        .iter()
+        .filter(|(_, r)| {
+            r.attrs
+                .as_path
+                .iter()
+                .any(|seg| seg.as_numbers().contains(&asn))
+        })
+        .collect();
+
+    if matches.is_empty() {
+        return format!("No routes with ASN {} in AS_PATH.\n", asn);
+    }
+
+    let mut out = format!("Routes with ASN {} in AS_PATH\n", asn);
+    out.push_str(&format!("{}\n", "=".repeat(40)));
+    matches.sort_by_key(|(k, _)| (k.address.octets(), k.prefix_len));
+    for (key, route) in &matches {
+        let nh = route
+            .attrs
+            .next_hop
+            .map(|a| a.to_string())
+            .unwrap_or_else(|| "-".into());
+        let as_path: String = route
+            .attrs
+            .as_path
+            .iter()
+            .flat_map(|seg| seg.as_numbers())
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        out.push_str(&format!(
+            "{:<20} via {} path {}\n",
+            key.to_string(),
+            nh,
+            as_path
+        ));
+    }
+    out
+}
+
+/// Filter Loc-RIB to routes with a specific next-hop address.
+fn cmd_bgp_rib_nexthop(rib: &Arc<RwLock<Rib>>, ip_str: &str) -> String {
+    let target: std::net::Ipv4Addr = match ip_str.parse() {
+        Ok(v) => v,
+        Err(_) => return format!("Invalid IPv4 address: '{}'\n", ip_str),
+    };
+    let rib = rib.read().unwrap_or_else(|e| e.into_inner());
+    let loc_rib = rib.loc_rib();
+
+    let mut matches: Vec<_> = loc_rib
+        .iter()
+        .filter(|(_, r)| r.attrs.next_hop == Some(target))
+        .collect();
+
+    if matches.is_empty() {
+        return format!("No routes with next-hop {}.\n", target);
+    }
+
+    let mut out = format!("Routes via next-hop {}\n", target);
+    out.push_str(&format!("{}\n", "=".repeat(40)));
+    matches.sort_by_key(|(k, _)| (k.address.octets(), k.prefix_len));
+    for (key, route) in &matches {
+        let lp = route.attrs.local_pref.unwrap_or(100);
+        let as_path: String = route
+            .attrs
+            .as_path
+            .iter()
+            .flat_map(|seg| seg.as_numbers())
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        out.push_str(&format!(
+            "{:<20} local-pref={} path={}\n",
+            key.to_string(),
+            lp,
+            if as_path.is_empty() { "-" } else { &as_path }
+        ));
+    }
+    out
+}
+
+fn cmd_version() -> String {
+    format!(
+        "PathForge BGP daemon\n\
+         Version: {}\n\
+         Rustc:   {}\n",
+        env!("CARGO_PKG_VERSION"),
+        option_env!("RUSTC_VERSION").unwrap_or("unknown"),
+    )
+}
+
 fn cmd_help() -> String {
     "Available commands:\n\
      \n\
-     show bgp summary              — Peer summary and RIB count\n\
-     show bgp rib                  — Full BGP routing table (Loc-RIB)\n\
-     show bgp rib prefix X.X.X.X/N — Detail for a specific prefix\n\
-     show bgp neighbors            — All neighbor detail\n\
-     show bgp neighbors <ip>       — Specific neighbor detail\n\
-     show bgp metrics              — Human-readable counters\n\
-     metrics                       — Prometheus exposition format\n\
-     help                          — Show this help\n\
-     quit / exit                   — Close connection\n"
+     show bgp summary                — Peer summary and RIB count\n\
+     show bgp rib                    — Full BGP routing table (Loc-RIB)\n\
+     show bgp rib prefix X.X.X.X/N  — Detail for a specific prefix\n\
+     show bgp rib aspath <ASN>       — Routes containing ASN in AS_PATH\n\
+     show bgp rib nexthop <X.X.X.X>  — Routes with a specific next-hop\n\
+     show bgp neighbors              — All neighbor detail\n\
+     show bgp neighbors <ip>         — Specific neighbor detail\n\
+     show bgp metrics                — Human-readable counters\n\
+     metrics                         — Prometheus exposition format\n\
+     version                         — Daemon version\n\
+     help                            — Show this help\n\
+     quit / exit                     — Close connection\n"
         .to_string()
 }
 
@@ -422,5 +532,73 @@ mod tests {
         let out = cmd_bgp_rib(&rib_arc);
         assert!(out.contains("192.168.0.0/24"));
         assert!(out.contains("65001"));
+    }
+
+    fn rib_with_routes() -> Arc<RwLock<Rib>> {
+        use crate::attr::{AsPathSegment, PathAttributes};
+        use crate::message::update::Prefix;
+        use std::net::Ipv4Addr;
+
+        let rib_arc = empty_rib();
+        let mut rib = rib_arc.write().unwrap();
+        let attrs = PathAttributes {
+            next_hop: Some(Ipv4Addr::new(192, 0, 2, 1)),
+            as_path: vec![AsPathSegment::AsSequence(vec![64500, 64501])],
+            ..Default::default()
+        };
+        let prefix = Prefix::new(Ipv4Addr::new(10, 0, 0, 0), 8);
+        let peer: SocketAddr = "192.0.2.1:179".parse().unwrap();
+        rib.process_update(peer, 64500, &[prefix], &attrs, &[]);
+        drop(rib);
+        rib_arc
+    }
+
+    #[test]
+    fn test_show_rib_aspath_found() {
+        let rib = rib_with_routes();
+        let out = cmd_bgp_rib_aspath(&rib, "64500");
+        assert!(out.contains("10.0.0.0/8"), "expected prefix, got: {out}");
+        assert!(out.contains("64500"));
+    }
+
+    #[test]
+    fn test_show_rib_aspath_not_found() {
+        let rib = rib_with_routes();
+        let out = cmd_bgp_rib_aspath(&rib, "99999");
+        assert!(out.contains("No routes"), "expected no-routes message, got: {out}");
+    }
+
+    #[test]
+    fn test_show_rib_aspath_invalid() {
+        let rib = empty_rib();
+        let out = cmd_bgp_rib_aspath(&rib, "notanasn");
+        assert!(out.contains("Invalid"), "expected invalid error, got: {out}");
+    }
+
+    #[test]
+    fn test_show_rib_nexthop_found() {
+        let rib = rib_with_routes();
+        let out = cmd_bgp_rib_nexthop(&rib, "192.0.2.1");
+        assert!(out.contains("10.0.0.0/8"), "expected prefix, got: {out}");
+    }
+
+    #[test]
+    fn test_show_rib_nexthop_not_found() {
+        let rib = rib_with_routes();
+        let out = cmd_bgp_rib_nexthop(&rib, "1.2.3.4");
+        assert!(out.contains("No routes"), "expected no-routes, got: {out}");
+    }
+
+    #[test]
+    fn test_show_rib_nexthop_invalid() {
+        let rib = empty_rib();
+        let out = cmd_bgp_rib_nexthop(&rib, "not-an-ip");
+        assert!(out.contains("Invalid"), "expected invalid error, got: {out}");
+    }
+
+    #[test]
+    fn test_version() {
+        let out = cmd_version();
+        assert!(out.contains("PathForge"), "got: {out}");
     }
 }
