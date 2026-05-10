@@ -130,12 +130,58 @@ impl Config {
     }
 
     fn validate(&self) -> Result<()> {
+        // AS number: must be non-zero (0 is reserved, RFC 7607)
         if self.router.local_as == 0 {
             anyhow::bail!("local_as must be non-zero");
         }
-        if self.router.hold_time != 0 && self.router.hold_time < 3 {
-            anyhow::bail!("hold_time must be 0 or >= 3 seconds");
+
+        // Router ID: 0.0.0.0 and 255.255.255.255 are invalid per RFC 4271
+        let rid = self.router.router_id;
+        if rid.is_unspecified() {
+            anyhow::bail!("router_id must not be 0.0.0.0");
         }
+        if rid.octets() == [255, 255, 255, 255] {
+            anyhow::bail!("router_id must not be 255.255.255.255");
+        }
+        if rid.is_loopback() {
+            anyhow::bail!("router_id must not be a loopback address (127.x.x.x)");
+        }
+
+        // Hold time: RFC 4271 §4.2 — must be 0 or >= 3 seconds
+        if self.router.hold_time != 0 && self.router.hold_time < 3 {
+            anyhow::bail!("hold_time must be 0 or >= 3 seconds (RFC 4271)");
+        }
+
+        // Keepalive interval: if explicitly set, must be > 0 and < hold_time
+        if let Some(ka) = self.router.keepalive_interval {
+            if ka == 0 {
+                anyhow::bail!("keepalive_interval must be > 0");
+            }
+            if self.router.hold_time != 0 && ka >= self.router.hold_time {
+                anyhow::bail!("keepalive_interval must be less than hold_time");
+            }
+        }
+
+        // Neighbors: no duplicate addresses, no zero remote_as
+        let mut seen_addrs = std::collections::HashSet::new();
+        for n in &self.neighbors {
+            if !seen_addrs.insert(n.addr) {
+                anyhow::bail!("duplicate neighbor address: {}", n.addr);
+            }
+            if n.remote_as == 0 {
+                anyhow::bail!("neighbor {}: remote_as must be non-zero", n.addr);
+            }
+            // Per-neighbor hold_time follows the same rule as global
+            if let Some(ht) = n.hold_time {
+                if ht != 0 && ht < 3 {
+                    anyhow::bail!(
+                        "neighbor {}: hold_time must be 0 or >= 3 seconds",
+                        n.addr
+                    );
+                }
+            }
+        }
+
         Ok(())
     }
 }
@@ -222,5 +268,85 @@ local_as = 0
 router_id = "1.2.3.4"
 "#;
         assert!(Config::from_str(s).is_err());
+    }
+
+    #[test]
+    fn test_invalid_router_id_unspecified() {
+        let s = r#"
+[router]
+local_as = 65000
+router_id = "0.0.0.0"
+"#;
+        let err = Config::from_str(s).unwrap_err().to_string();
+        assert!(err.contains("0.0.0.0"), "expected 0.0.0.0 error, got: {err}");
+    }
+
+    #[test]
+    fn test_invalid_router_id_broadcast() {
+        let s = r#"
+[router]
+local_as = 65000
+router_id = "255.255.255.255"
+"#;
+        assert!(Config::from_str(s).is_err());
+    }
+
+    #[test]
+    fn test_invalid_router_id_loopback() {
+        let s = r#"
+[router]
+local_as = 65000
+router_id = "127.0.0.1"
+"#;
+        assert!(Config::from_str(s).is_err());
+    }
+
+    #[test]
+    fn test_duplicate_neighbor() {
+        let s = r#"
+[router]
+local_as = 65000
+router_id = "1.2.3.4"
+
+[[neighbors]]
+addr = "10.0.0.1"
+remote_as = 65001
+
+[[neighbors]]
+addr = "10.0.0.1"
+remote_as = 65002
+"#;
+        let err = Config::from_str(s).unwrap_err().to_string();
+        assert!(err.contains("duplicate"), "expected duplicate error, got: {err}");
+    }
+
+    #[test]
+    fn test_neighbor_zero_remote_as() {
+        let s = r#"
+[router]
+local_as = 65000
+router_id = "1.2.3.4"
+
+[[neighbors]]
+addr = "10.0.0.1"
+remote_as = 0
+"#;
+        assert!(Config::from_str(s).is_err());
+    }
+
+    #[test]
+    fn test_invalid_keepalive_interval() {
+        let s = r#"
+[router]
+local_as = 65000
+router_id = "1.2.3.4"
+hold_time = 90
+keepalive_interval = 100
+"#;
+        let err = Config::from_str(s).unwrap_err().to_string();
+        assert!(
+            err.contains("keepalive_interval"),
+            "expected keepalive error, got: {err}"
+        );
     }
 }
